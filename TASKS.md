@@ -38,9 +38,9 @@
 | P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 8 | Code done (on-robot tests blocked) |
 | P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 5 | Logic done; sim blocked (Isaac Lab + assets) |
 | P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 6 | Logic done; training blocked (Isaac Lab/GPU/torch) |
-| P5 — Sim-to-Real Deployment | **High** | Trained | 3 | 14 | 0 | Not started |
+| P5 — Sim-to-Real Deployment | **High** | Trained | 3 | 14 | 6 | Runtime logic done; hardware gated/blocked |
 | P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 0 | Not started |
-| **Total** | | | **24** | **89** | **39** | |
+| **Total** | | | **24** | **89** | **45** | |
 
 **Current focus:** P1 — the First Sprint (perceive terrain & stop safely). P0 foundation is complete. See the [First Sprint](#first-sprint-2-weeks) section and roadmap §13.
 
@@ -193,30 +193,28 @@
 > **Highest-risk phase.** Strict safety. `REAL_ROBOT_LOW_LEVEL_LEG_POLICY_APPROVED` must be explicitly set true only after the documented safety review (§14). Escalate through levels in order; pass the Go/No-Go gate before each step up.
 
 ## Module 5.1 — Policy Runtime
-- `[ ]` **P5-M1-T1** `observation_builder.py` — build obs from real robot state, match training normalization exactly; missing values → safe stop.
-  - *AC:* obs dim = training config · ordering tested · norm stats from training artifact · missing sensor → stop.
-- `[ ]` **P5-M1-T2** `onnx_policy_runner.py` — load ONNX, fixed-rate inference, validate output dims, timing metrics.
-  - *AC:* inference < policy period · matches PyTorch within tolerance · bad output → safe stop.
-- `[ ]` **P5-M1-T3** `action_filter.py` — clamp joint targets, limit action rate + joint velocity, low-pass, joint safety envelope.
-  - *AC:* no output exceeds limits · no action spike passes · unit-testable with extreme inputs.
-- `[ ]` **P5-M1-T4** `policy_logger.py` — log full deployment record (§9.4).
+- `[x]` **P5-M1-T1** `observation_builder.py` — build obs from real robot state, match training normalization exactly; missing values → safe stop. *core.observation_builder; 4 tests incl. **layout==training** contract test; missing/non-finite → ok=False (safe stop).*
+- `[~]` **P5-M1-T2** `onnx_policy_runner.py` — load ONNX, fixed-rate inference, validate output dims, timing metrics. *`onnx_runner_core` (validate_output, within_period) tested (4); **session load blocked on onnxruntime + policy.onnx**.*
+- `[x]` **P5-M1-T3** `action_filter.py` — clamp joint targets, limit action rate + joint velocity, low-pass, joint safety envelope. *core.action_filter; 6 tests incl. extreme-input fuzz proving outputs never exceed soft limits + NaN/Inf rejection.*
+- `[x]` **P5-M1-T4** `policy_logger.py` — log full deployment record (§9.4). *Wraps JsonlRecorder; enforces all §9.4 required fields (test).*
 
 ## Module 5.2 — Safety Supervisor
-- `[ ]` **P5-M2-T1** `policy_safety_supervisor.py` — cut output on: roll/pitch over threshold · joint/IMU missing · inference timeout · action NaN/Inf · joint target outside soft limit · operator stop · base instability. Switch to damping/zero.
+- `[x]` **P5-M2-T1** `policy_safety_supervisor.py` — cut output on: roll/pitch over threshold · joint/IMU missing · inference timeout · action NaN/Inf · joint target outside soft limit · operator stop · base instability. Switch to damping/zero. *core.policy_supervisor; 7 tests (every cut condition + operator override).*
 
 ## Module 5.3 — Staged Hardware Bring-up
-- `[ ]` **P5-M3-T1** Level 0 — offline replay against recorded logs (no robot command topic).
-- `[ ]` **P5-M3-T2** Level 1 — hardware dry-run (powered, debug output only, no leg command).
-- `[ ]` **P5-M3-T3** Level 2 — suspended standing (gantry; balance/small offsets; operator e-stop ready).
-- `[ ]` **P5-M3-T4** Level 3 — suspended stepping in place (verify joint order, sign, delay).
-- `[ ]` **P5-M3-T5** Level 4 — foam obstacle 2→5→8 cm.
-- `[ ]` **P5-M3-T6** Level 5 — single wooden step 5→8→10–12 cm.
-- `[ ]` **P5-M3-T7** `tools/analyze_policy_log.py` + `compare_sim_real.py` — real-log analyzer.
-- `[ ]` **P5-M3-T8** Go/No-Go checklist gate (§9.5) before each escalation.
-- `[ ]` **P5-M3-T9** Level 6 — real stairs. **Only after documented safety review + all lower levels pass.**
+> **All hardware levels are GATED by `REAL_ROBOT_LOW_LEVEL_LEG_POLICY_APPROVED=false` and require the physical robot. `joint_policy_node` runs dry-run / PolicyDebug-only and creates the leg-command publisher ONLY when the flag is true.**
+- `[!]` **P5-M3-T1** Level 0 — offline replay against recorded logs (no robot command topic). **BLOCKED: needs a trained policy.onnx + recorded logs.** Runner + analyzer ready.
+- `[~]` **P5-M3-T2** Level 1 — hardware dry-run (powered, debug output only, no leg command). *`joint_policy_node` implements dry-run/PolicyDebug-only; **running on powered hardware blocked**.*
+- `[!]` **P5-M3-T3** Level 2 — suspended standing (gantry; balance/small offsets; operator e-stop ready). **BLOCKED: hardware + documented safety review + approval flag.**
+- `[!]` **P5-M3-T4** Level 3 — suspended stepping in place (verify joint order, sign, delay). **BLOCKED: hardware + approval.**
+- `[!]` **P5-M3-T5** Level 4 — foam obstacle 2→5→8 cm. **BLOCKED: hardware + approval.**
+- `[!]` **P5-M3-T6** Level 5 — single wooden step 5→8→10–12 cm. **BLOCKED: hardware + approval.**
+- `[x]` **P5-M3-T7** `tools/analyze_policy_log.py` + `compare_sim_real.py` — real-log analyzer. *core.log_analysis (summarize, max_action_divergence); 3 tests.*
+- `[x]` **P5-M3-T8** Go/No-Go checklist gate (§9.5) before each escalation. *Documented in [docs/real_robot_test_protocol.md](docs/real_robot_test_protocol.md) + [docs/sim_to_real_checklist.md](docs/sim_to_real_checklist.md).*
+- `[!]` **P5-M3-T9** Level 6 — real stairs. **BLOCKED: only after documented safety review + all lower levels pass.**
 
 ### ✅ Phase 5 Definition of Done
-- `[ ]` ONNX runtime works on target compute · observation builder matches training · safety supervisor stops unsafe output · suspended tests pass · low-obstacle tests pass · single-step tests pass · real stairs approved only after documented safety review.
+- `[~]` ONNX runtime works on target compute · observation builder matches training · safety supervisor stops unsafe output · suspended tests pass · low-obstacle tests pass · single-step tests pass · real stairs approved only after documented safety review. *Runtime **logic** (obs builder, action filter, safety supervisor, logger, log analysis) complete + unit-tested; **ONNX load + all hardware levels blocked on onnxruntime/trained policy + physical robot + documented safety review**.*
 
 ---
 
