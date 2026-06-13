@@ -2,7 +2,7 @@
 
 **Plan source of truth:** [x2_terrain_stair_climbing_roadmap.md](x2_terrain_stair_climbing_roadmap.md)
 **This file:** living checklist of every module and task. Update each task's status box as work progresses.
-**Last updated:** 2026-06-13
+**Last updated:** 2026-06-13 — Phase 0 complete (foundation, shared lib, configs).
 
 ---
 
@@ -33,16 +33,16 @@
 
 | Phase | Risk | Training | Modules | Tasks | Done | Status |
 |-------|------|----------|:---:|:---:|:---:|--------|
-| P0 — Foundation / Repo setup | — | No | 2 | 5 | 0 | Not started |
+| P0 — Foundation / Repo setup | — | No | 2 | 5 | 5 | ✅ Done |
 | P1 — Terrain Awareness | Low | No | 4 | 17 | 0 | Not started |
 | P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 0 | Not started |
 | P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 0 | Not started |
 | P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 0 | Not started |
 | P5 — Sim-to-Real Deployment | **High** | Trained | 3 | 14 | 0 | Not started |
 | P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 0 | Not started |
-| **Total** | | | **24** | **89** | **0** | |
+| **Total** | | | **24** | **89** | **5** | |
 
-**Current focus:** P0 + P1 — the First Sprint (perceive terrain & stop safely). See the [First Sprint](#first-sprint-2-weeks) section and roadmap §13.
+**Current focus:** P1 — the First Sprint (perceive terrain & stop safely). P0 foundation is complete. See the [First Sprint](#first-sprint-2-weeks) section and roadmap §13.
 
 ---
 
@@ -50,13 +50,13 @@
 *Prerequisite for everything. Establishes the repo skeleton from roadmap §3.*
 
 ## Module 0.1 — Repo & Docs Skeleton
-- `[ ]` **P0-M1-T1** Create the `x2_terrain_locomotion/` tree from roadmap §3: `docs/`, `ros2_ws/src/`, `training/`, `tools/`, `configs/`, `tests/{unit,integration,simulation,hardware_dry_run}`.
-- `[ ]` **P0-M1-T2** Seed top-level docs: `README.md`, `ROADMAP.md` (link to roadmap), `SAFETY.md` (copy §1 + §14), `TASKS.md` (this file).
-- `[ ]` **P0-M1-T3** Seed `docs/`: `architecture.md`, `ros_topics.md`, `data_contracts.md`, `training_method.md`, `real_robot_test_protocol.md`, `sim_to_real_checklist.md`, `known_risks.md`.
+- `[x]` **P0-M1-T1** Create the `x2_terrain_locomotion/` tree from roadmap §3: `docs/`, `ros2_ws/src/`, `training/`, `tools/`, `configs/`, `tests/{unit,integration,simulation,hardware_dry_run}`.
+- `[x]` **P0-M1-T2** Seed top-level docs: `README.md`, `ROADMAP.md` (link to roadmap), `SAFETY.md` (copy §1 + §14), `TASKS.md` (this file).
+- `[x]` **P0-M1-T3** Seed `docs/`: `architecture.md`, `ros_topics.md`, `data_contracts.md`, `training_method.md`, `real_robot_test_protocol.md`, `sim_to_real_checklist.md`, `known_risks.md`.
 
 ## Module 0.2 — Shared Library & Configs
-- `[ ]` **P0-M2-T1** Create `x2_common` package: `topic_discovery.py`, `time_sync.py`, `transforms.py`, `qos_profiles.py`, `config_loader.py`, `logging_utils.py`, `safety_limits.py` (+ `package.xml`, `setup.py`).
-- `[ ]` **P0-M2-T2** Create base config files: `robot_topics.yaml`, `terrain_perception.yaml`, `safe_locomotion.yaml`, `safety_limits.yaml`, `joint_limits_x2_ultra.yaml`, `training_default.yaml`.
+- `[x]` **P0-M2-T1** Create `x2_common` package: `topic_discovery.py`, `time_sync.py`, `transforms.py`, `qos_profiles.py`, `config_loader.py`, `logging_utils.py`, `safety_limits.py` (+ `package.xml`, `setup.py`). *Pure-logic modules unit-tested (31 tests passing); ROS2 imports are lazy.*
+- `[x]` **P0-M2-T2** Create base config files: `robot_topics.yaml`, `terrain_perception.yaml`, `safe_locomotion.yaml`, `safety_limits.yaml`, `joint_limits_x2_ultra.yaml`, `training_default.yaml`.
 
 ---
 
@@ -259,7 +259,7 @@
 ## First Sprint (2 weeks)
 > From roadmap §13. Goal: **X2 perceives terrain and stops before unsafe terrain using existing SDK locomotion.** Track via the IDs above.
 
-- `[ ]` P0-M2-T2 — `configs/terrain_perception.yaml` + `configs/safe_locomotion.yaml`
+- `[x]` P0-M2-T2 — `configs/terrain_perception.yaml` + `configs/safe_locomotion.yaml`
 - `[ ]` P1-M1-T2 — `x2_terrain_msgs`
 - `[ ]` P1-M2-T3 — `heightmap_node.py`
 - `[ ]` P1-M3-T1 — `stair_detector.py`

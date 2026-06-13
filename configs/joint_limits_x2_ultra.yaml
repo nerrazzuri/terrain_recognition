@@ -1,0 +1,35 @@
+# X2 Ultra leg joint limits. PROVISIONAL placeholders — MUST be verified against AimDK
+# joint motion-range docs and the real robot before use in any policy runtime (R2, AGENTS.md
+# §3). Order: left leg then right leg. Units: radians. Never hardcode these in source.
+#
+# Ref: https://x2-aimdk.agibot.com/en/latest/about_agibot_X2/joint_name_and_limit.html
+
+units: radians
+verified: false
+
+# Canonical leg joint order (per-leg). Sim<->robot mapping done in x2_joint_map.py.
+leg_joint_order:
+  - hip_pitch
+  - hip_roll
+  - hip_yaw
+  - knee
+  - ankle_pitch
+  - ankle_roll
+
+# Per-joint [min, max] position limits and velocity/effort caps. PLACEHOLDER values.
+joints:
+  left_hip_pitch:   {min: -1.57, max: 1.57, vel_max: 8.0, effort_max: 100.0}
+  left_hip_roll:    {min: -0.52, max: 0.52, vel_max: 8.0, effort_max: 100.0}
+  left_hip_yaw:     {min: -0.52, max: 0.52, vel_max: 8.0, effort_max: 100.0}
+  left_knee:        {min: 0.0,   max: 2.27, vel_max: 8.0, effort_max: 150.0}
+  left_ankle_pitch: {min: -0.87, max: 0.52, vel_max: 8.0, effort_max: 80.0}
+  left_ankle_roll:  {min: -0.44, max: 0.44, vel_max: 8.0, effort_max: 80.0}
+  right_hip_pitch:  {min: -1.57, max: 1.57, vel_max: 8.0, effort_max: 100.0}
+  right_hip_roll:   {min: -0.52, max: 0.52, vel_max: 8.0, effort_max: 100.0}
+  right_hip_yaw:    {min: -0.52, max: 0.52, vel_max: 8.0, effort_max: 100.0}
+  right_knee:       {min: 0.0,   max: 2.27, vel_max: 8.0, effort_max: 150.0}
+  right_ankle_pitch:{min: -0.87, max: 0.52, vel_max: 8.0, effort_max: 80.0}
+  right_ankle_roll: {min: -0.44, max: 0.44, vel_max: 8.0, effort_max: 80.0}
+
+# Soft-limit margin (rad) kept inside the hard limits by the action filter.
+soft_limit_margin_rad: 0.05

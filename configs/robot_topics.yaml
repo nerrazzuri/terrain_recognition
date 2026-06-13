@@ -1,0 +1,70 @@
+# Robot topic inventory. PROVISIONAL — every name/type MUST be verified on the real robot
+# with `ros2 topic list` / `ros2 topic info -v` before a node trusts it (AGENTS.md §3).
+# Used by x2_common.topic_discovery and tools/check_topics.sh / check_qos.sh.
+
+sensors:
+  depth_image:
+    name: /aima/hal/sensor/rgbd_head_front/depth_image
+    type: sensor_msgs/msg/Image
+    verified: false
+  depth_pointcloud:
+    name: /aima/hal/sensor/rgbd_head_front/depth_pointcloud
+    type: sensor_msgs/msg/PointCloud2
+    verified: false
+  depth_camera_info:
+    name: /aima/hal/sensor/rgbd_head_front/depth_camera_info
+    type: sensor_msgs/msg/CameraInfo
+    verified: false
+  rgbd_imu:
+    name: /aima/hal/sensor/rgbd_head_front/imu
+    type: sensor_msgs/msg/Imu
+    verified: false
+  lidar_pointcloud:
+    name: /aima/hal/sensor/lidar_chest_front/lidar_pointcloud
+    type: sensor_msgs/msg/PointCloud2
+    verified: false
+  lidar_imu:
+    name: /aima/hal/sensor/lidar_chest_front/imu
+    type: sensor_msgs/msg/Imu
+    verified: false
+  imu_chest:
+    name: /aima/hal/imu/chest/state
+    type: ""        # verify
+    verified: false
+  imu_torso:
+    name: /aima/hal/imu/torso/state
+    type: ""        # verify
+    verified: false
+
+# Internal terrain topics published by this stack.
+terrain:
+  heightmap:
+    name: /x2/terrain/heightmap
+    type: x2_terrain_msgs/msg/TerrainGrid
+  status:
+    name: /x2/terrain/status
+    type: x2_terrain_msgs/msg/TerrainStatus
+  stair_estimate:
+    name: /x2/terrain/stair_estimate
+    type: x2_terrain_msgs/msg/StairEstimate
+  safety_decision:
+    name: /x2/terrain/safety_decision
+    type: x2_terrain_msgs/msg/SafetyDecision
+  policy_debug:
+    name: /x2/policy/debug
+    type: x2_terrain_msgs/msg/PolicyDebug
+
+# Locomotion command output. Source must be registered before publishing.
+locomotion:
+  velocity:
+    name: /aima/mc/locomotion/velocity
+    type: ""        # verify
+    verified: false
+    command_source: x2_terrain_safe_locomotion
+
+# Leg joint command — FORBIDDEN while REAL_ROBOT_LOW_LEVEL_LEG_POLICY_APPROVED is false.
+forbidden_while_unapproved:
+  leg_command:
+    name: /aima/hal/joint/leg/command
+    type: ""        # verify
+    verified: false

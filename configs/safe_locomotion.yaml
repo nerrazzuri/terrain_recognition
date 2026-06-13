@@ -1,0 +1,46 @@
+# Safe SDK locomotion parameters (Phase 2). Velocity policy follows roadmap §6.4.
+# Still does NOT climb anything. Fail closed: unsafe/unknown -> stop.
+
+command_source:
+  name: x2_terrain_safe_locomotion
+  fail_closed_on_register_error: true   # do not publish velocity if registration fails
+
+# Max forward velocity allowed per terrain type (m/s). Anything not listed -> stop (0.0).
+velocity_by_terrain:
+  flat_ground: 0.12
+  rough_ground: 0.06
+  slope_up: 0.04
+  slope_down: 0.04
+  curb_or_single_step: 0.0
+  stairs_up: 0.0
+  stairs_down: 0.0
+  gap_or_hole: 0.0
+  platform: 0.0
+  unknown_unsafe: 0.0
+
+velocity_limits:
+  max_forward_mps: 0.12
+  max_lateral_mps: 0.0          # no lateral in first version
+  max_yaw_radps: 0.3
+
+command_smoother:
+  max_forward_accel_mps2: 0.05
+  max_yaw_accel_radps2: 0.10
+  # emergency stop bypasses ramps -> immediate zero
+
+safety_supervisor:
+  terrain_status_timeout_s: 0.5
+  imu_timeout_s: 0.2
+  command_timeout_s: 0.3
+  max_roll_deg: 15.0
+  max_pitch_deg: 15.0
+  stop_on_unknown_ahead: true
+  stop_on_stairs_or_gap_ahead: true
+
+dry_run:
+  enabled: true                 # publish to debug topic only by default
+  debug_topic: /x2/safe_locomotion/debug
+
+logging:
+  save_dir: logs/safe_locomotion
+  enabled: true
