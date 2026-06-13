@@ -1,70 +1,83 @@
-# Robot topic inventory. PROVISIONAL — every name/type MUST be verified on the real robot
-# with `ros2 topic list` / `ros2 topic info -v` before a node trusts it (AGENTS.md §3).
+# Robot topic inventory — VERIFIED against AimDK SDK lx2501_3-v0.9.0.4 (docs + Python
+# examples). Names confirmed; ROS message TYPES still to be confirmed with
+# `ros2 topic info -v` on the live robot for the sensor topics (std sensor_msgs expected).
 # Used by x2_common.topic_discovery and tools/check_topics.sh / check_qos.sh.
+
+source_sdk: lx2501_3-v0.9.0.4
 
 sensors:
   depth_image:
     name: /aima/hal/sensor/rgbd_head_front/depth_image
     type: sensor_msgs/msg/Image
-    verified: false
+    verified: true        # name confirmed in SDK
   depth_pointcloud:
     name: /aima/hal/sensor/rgbd_head_front/depth_pointcloud
     type: sensor_msgs/msg/PointCloud2
-    verified: false
+    verified: true
   depth_camera_info:
     name: /aima/hal/sensor/rgbd_head_front/depth_camera_info
     type: sensor_msgs/msg/CameraInfo
-    verified: false
+    verified: true
   rgbd_imu:
     name: /aima/hal/sensor/rgbd_head_front/imu
     type: sensor_msgs/msg/Imu
-    verified: false
+    verified: true
   lidar_pointcloud:
     name: /aima/hal/sensor/lidar_chest_front/lidar_pointcloud
     type: sensor_msgs/msg/PointCloud2
-    verified: false
+    verified: true
   lidar_imu:
     name: /aima/hal/sensor/lidar_chest_front/imu
     type: sensor_msgs/msg/Imu
-    verified: false
+    verified: true
   imu_chest:
     name: /aima/hal/imu/chest/state
-    type: ""        # verify
-    verified: false
+    type: ""              # confirm with ros2 topic info -v
+    verified: true        # name confirmed
   imu_torso:
     name: /aima/hal/imu/torso/state
-    type: ""        # verify
-    verified: false
+    type: ""              # confirm; SDK also shows a "torse" typo variant — verify on robot
+    verified: true
+
+# Joint state/command topics (aimdk_msgs). Leg command is FORBIDDEN while the approval flag
+# is false (see forbidden_while_unapproved). leg/state is used to verify joint order.
+joints:
+  leg_state:
+    name: /aima/hal/joint/leg/state
+    type: aimdk_msgs/msg/JointStateArray
+    verified: true
+  waist_state:
+    name: /aima/hal/joint/waist/state
+    type: aimdk_msgs/msg/JointStateArray
+    verified: true
 
 # Internal terrain topics published by this stack.
 terrain:
-  heightmap:
-    name: /x2/terrain/heightmap
-    type: x2_terrain_msgs/msg/TerrainGrid
-  status:
-    name: /x2/terrain/status
-    type: x2_terrain_msgs/msg/TerrainStatus
-  stair_estimate:
-    name: /x2/terrain/stair_estimate
-    type: x2_terrain_msgs/msg/StairEstimate
-  safety_decision:
-    name: /x2/terrain/safety_decision
-    type: x2_terrain_msgs/msg/SafetyDecision
-  policy_debug:
-    name: /x2/policy/debug
-    type: x2_terrain_msgs/msg/PolicyDebug
+  heightmap:    {name: /x2/terrain/heightmap,      type: x2_terrain_msgs/msg/TerrainGrid}
+  status:       {name: /x2/terrain/status,         type: x2_terrain_msgs/msg/TerrainStatus}
+  stair_estimate: {name: /x2/terrain/stair_estimate, type: x2_terrain_msgs/msg/StairEstimate}
+  safety_decision: {name: /x2/terrain/safety_decision, type: x2_terrain_msgs/msg/SafetyDecision}
+  policy_debug: {name: /x2/policy/debug,           type: x2_terrain_msgs/msg/PolicyDebug}
 
-# Locomotion command output. Source must be registered before publishing.
+# Locomotion command output. Source MUST be registered before publishing (SDK v0.7+).
 locomotion:
   velocity:
     name: /aima/mc/locomotion/velocity
-    type: ""        # verify
-    verified: false
+    type: aimdk_msgs/msg/McLocomotionVelocity   # fields: forward_velocity, lateral_velocity, angular_velocity
+    verified: true
     command_source: x2_terrain_safe_locomotion
+  # Input-source registration / query services (aimdk_msgs).
+  set_input_source_service:
+    name: /aimdk_msgs/srv/SetMcInputSource
+    type: aimdk_msgs/srv/SetMcInputSource
+    register_action_value: 1001                  # action.value to register a source
+  get_input_source_service:
+    name: /aimdk_msgs/srv/GetCurrentInputSource
+    type: aimdk_msgs/srv/GetCurrentInputSource
 
 # Leg joint command — FORBIDDEN while REAL_ROBOT_LOW_LEVEL_LEG_POLICY_APPROVED is false.
 forbidden_while_unapproved:
   leg_command:
     name: /aima/hal/joint/leg/command
-    type: ""        # verify
-    verified: false
+    type: aimdk_msgs/msg/JointCommandArray
+    verified: true

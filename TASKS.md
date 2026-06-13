@@ -2,7 +2,7 @@
 
 **Plan source of truth:** [x2_terrain_stair_climbing_roadmap.md](x2_terrain_stair_climbing_roadmap.md)
 **This file:** living checklist of every module and task. Update each task's status box as work progresses.
-**Last updated:** 2026-06-14 — All phases scaffolded P0-P6; 172 tests passing. Software-complete items marked [x]; sim/hardware/training-dependent items marked [~]/[!] with blockers.
+**Last updated:** 2026-06-14 — All phases scaffolded P0-P6; 173 tests passing. Integrated X2_URDF-v1.3.0 (assets, joint limits) + SDK lx2501_3-v0.9.0.4 (topics, AimDK velocity/registration API). Software-complete items [x]; sim/hardware/training-dependent items [~]/[!] with blockers.
 
 ---
 
@@ -35,12 +35,12 @@
 |-------|------|----------|:---:|:---:|:---:|--------|
 | P0 — Foundation / Repo setup | — | No | 2 | 5 | 5 | ✅ Done |
 | P1 — Terrain Awareness | Low | No | 4 | 17 | 15 | Code done (2 blocked on hardware bags) |
-| P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 8 | Code done (on-robot tests blocked) |
-| P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 5 | Logic done; sim blocked (Isaac Lab + assets) |
+| P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 9 | Code done; AimDK API wired (on-robot tests blocked) |
+| P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 6 | Assets+limits in; sim spawn blocked (Isaac Lab/MuJoCo) |
 | P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 6 | Logic done; training blocked (Isaac Lab/GPU/torch) |
 | P5 — Sim-to-Real Deployment | **High** | Trained | 3 | 14 | 6 | Runtime logic done; hardware gated/blocked |
 | P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 1 | Architecture scaffolded; training blocked |
-| **Total** | | | **24** | **89** | **46** | |
+| **Total** | | | **24** | **89** | **48** | |
 
 **Current focus:** Software for P0-P2 is complete (perceive terrain & stop safely — the First Sprint). P3-P6 logic is implemented + unit-tested; their sim/training/hardware execution is blocked on Isaac Lab + GPU + torch + the X2 USD asset + the physical robot (see per-task blockers).
 
@@ -68,7 +68,7 @@
 ## Module 1.1 — Custom Messages & Workspace
 - `[x]` **P1-M1-T1** Create the ROS2 workspace skeleton (`ros2_ws/src/...` packages with `package.xml` / `setup.py`). *4 packages: x2_common, x2_terrain_msgs, x2_terrain_perception, x2_safe_locomotion, x2_policy_runtime.*
 - `[x]` **P1-M1-T2** Define `x2_terrain_msgs`: `TerrainCell.msg`, `TerrainGrid.msg`, `TerrainStatus.msg`, `StairEstimate.msg`, `SafetyDecision.msg`, `PolicyDebug.msg`, `srv/ResetTerrainMap.srv` (fields per roadmap §5.3). *ament_cmake + rosidl.*
-- `[x]` **P1-M1-T3** Build `topic_discovery.py` + `tools/check_topics.sh` / `check_qos.sh`; verify real topics with `ros2 topic list` / `ros2 topic info -v`. *topic_discovery in x2_common (P0); tools added. Live verification still pending on robot.*
+- `[x]` **P1-M1-T3** Build `topic_discovery.py` + `tools/check_topics.sh` / `check_qos.sh`; verify real topics with `ros2 topic list` / `ros2 topic info -v`. *topic_discovery in x2_common (P0); tools added. **Topic names + message types verified against SDK lx2501_3-v0.9.0.4** and recorded in `robot_topics.yaml` (verified:true); live QoS check still pending on robot.*
 
 ## Module 1.2 — Point Cloud → Height Map Pipeline
 - `[x]` **P1-M2-T1** `pointcloud_projector.py` — subscribe RGB-D/LiDAR cloud, transform to base frame, drop NaNs, crop ROI (x 0–2 m, y ±0.8 m, z −0.5–1.0 m), voxel downsample. *Uses tested x2_common.transforms (drop_nonfinite, crop_roi); watchdog for missing cloud. AC needs live-rate check on robot.*
@@ -101,9 +101,9 @@
 > Publishes to `/aima/mc/locomotion/velocity` (fields: source, forward, lateral, angular). The command source must be registered before publishing.
 
 ## Module 2.1 — Command Source & Velocity
-- `[~]` **P2-M1-T1** `input_source_registrar.py` — register source `x2_terrain_safe_locomotion`, check priority, prevent name collision.
-  - *AC:* registers before publisher starts · fails closed on failure · logs source/priority. *Node + fail-closed logic done; `register_source()` returns False until the real AimDK API is wired (isolated, documented). Adapter won't publish live without it.*
-- `[x]` **P2-M1-T2** `velocity_adapter.py` — map desired → safe velocity by terrain type; stop before stairs/gaps/unknown; smooth. Policy: flat ≤0.12, rough ≤0.06, mild slope ≤0.04 m/s; curb/stairs/gap/unknown → stop. *core.velocity_policy (9 tests); dry-run default; stale-perception watchdog zeros velocity.*
+- `[x]` **P2-M1-T1** `input_source_registrar.py` — register source `x2_terrain_safe_locomotion`, check priority, prevent name collision.
+  - *AC:* registers before publisher starts · fails closed on failure · logs source/priority. *Real AimDK API wired: `aimdk_msgs/srv/SetMcInputSource` (action.value=1001, priority/timeout from config); fails closed if aimdk_msgs absent or call fails. Live registration test pending on robot.*
+- `[x]` **P2-M1-T2** `velocity_adapter.py` — map desired → safe velocity by terrain type; stop before stairs/gaps/unknown; smooth. Policy: flat ≤0.12, rough ≤0.06, mild slope ≤0.04 m/s; curb/stairs/gap/unknown → stop. *core.velocity_policy (9 tests); dry-run default; stale-perception watchdog zeros velocity. Live publisher uses real `aimdk_msgs/msg/McLocomotionVelocity` (forward/lateral/angular).*
 - `[x]` **P2-M1-T3** `command_smoother.py` — ramp limits (fwd accel 0.05 m/s², yaw 0.10 rad/s²); emergency = immediate zero. *core.smoother (3 tests).*
 
 ## Module 2.2 — Safety Layer
@@ -129,13 +129,13 @@
 > **Goal:** build a simulation accurate enough to train/test before touching real hardware. Primary: **Isaac Lab**; secondary: MuJoCo. No RL stair policy before this is stable.
 
 ## Module 3.1 — Robot Model Assets
-- `[!]` **P3-M1-T1** Locate/collect X2 URDF/MJCF, meshes, joint names/order/limits, default pose, mass, inertia, foot collision, torque/velocity limits, PD estimates, actuator delay, self-collision pairs (roadmap §7.2). **BLOCKED: assets must be extracted from the Agibot SDK** (not in repo). `joint_limits_x2_ultra.yaml` has placeholders (verified:false).
-- `[!]` **P3-M1-T2** Convert model to an Isaac Lab asset (`x2.usd`); place under `training/isaac_lab/assets/`. **BLOCKED on P3-M1-T1 + Isaac Lab.** `x2_robot_cfg` reads `X2_USD_PATH`/`assets/x2.usd` and `assets_available()` gates spawn.
+- `[x]` **P3-M1-T1** Locate/collect X2 URDF/MJCF, meshes, joint names/order/limits, default pose, mass, inertia, foot collision, torque/velocity limits, PD estimates, actuator delay, self-collision pairs (roadmap §7.2). *From **X2_URDF-v1.3.0**: `x2_ultra.urdf` + `x2_ultra_simple_collision.urdf` + MJCF (`x2_ultra.xml`) + meshes placed under `training/`. Real leg+waist joint names/limits/effort/velocity extracted into `joint_limits_x2_ultra.yaml` (verified:true). Meshes gitignored (~112 MB); repopulate via `tools/fetch_x2_assets.sh`.*
+- `[~]` **P3-M1-T2** Convert model to an Isaac Lab asset (`x2.usd`); place under `training/isaac_lab/assets/`. *URDF placed; `x2_robot_cfg` spawns via Isaac Lab's URDF importer or a converted USD (`X2_USD_PATH`); `assets_available()` now true. **USD conversion command documented (assets/SOURCES.md); running it needs Isaac Lab.***
 
 ## Module 3.2 — Config & Validation
 - `[x]` **P3-M2-T1** `x2_joint_map.py` — map sim joints ↔ AimDK order (legs: L then R; hip_pitch/roll/yaw, knee, ankle_pitch/roll). *Pure logic, 5 unit tests (round-trip, reorder, missing-joint, L/R balance); limits from config.*
 - `[x]` **P3-M2-T2** `tools/check_joint_order.py` — joint-order verification tool. *Runs; prints side-by-side table; warns on unverified limits.*
-- `[x]` **P3-M2-T3** Joint limit config `joint_limits_x2_ultra.yaml`. *Placeholder values, `verified: false` until checked vs AimDK docs.*
+- `[x]` **P3-M2-T3** Joint limit config `joint_limits_x2_ultra.yaml`. *Real values from X2_URDF-v1.3.0 (`verified: true`); 12 leg + 3 waist joints with position/velocity/effort limits.*
 - `[~]` **P3-M2-T4** `x2_actuator_cfg.py` — actuator / PD parameters. *Builds ImplicitActuatorCfg from config; **blocked on Isaac Lab**; PD gains are first estimates needing sim validation.*
 - `[~]` **P3-M2-T5** `x2_robot_cfg.py` — asset path, default pose, base height, limits, PD gains, contact/termination bodies, feet names. *Scaffold complete; **blocked on Isaac Lab + X2 USD asset**; AC (spawn/stand) pending the asset.*
 

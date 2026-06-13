@@ -56,9 +56,12 @@ class VelocityAdapter(Node):
 
         self._debug_pub = self.create_publisher(
             TwistStamped, safe["dry_run"]["debug_topic"], command_qos())
+        # Real publisher uses the AimDK McLocomotionVelocity message (SDK v0.9.0.4). Created
+        # lazily only when going live so dry-run never needs aimdk_msgs.
         real_topic = config_loader.get(topics, "locomotion.velocity.name")
-        self._real_pub = self.create_publisher(Twist, real_topic, command_qos()) \
-            if real_topic else None
+        self._real_topic = real_topic
+        self._real_pub = None
+        self._McLocomotionVelocity = None
         self._heartbeat = self.create_publisher(Bool, "/x2/safe_locomotion/command_heartbeat", 10)
 
         self.create_timer(self._period, self._tick)
@@ -107,11 +110,27 @@ class VelocityAdapter(Node):
         self._debug_pub.publish(stamped)
 
         # Only ever touch the real robot when explicitly live AND source registered.
-        if not self._dry_run and self._source_registered and self._real_pub is not None:
-            out = Twist()
-            out.linear.x = cmd.forward
-            out.angular.z = cmd.yaw
-            self._real_pub.publish(out)
+        if not self._dry_run and self._source_registered:
+            self._publish_real(cmd)
+
+    def _publish_real(self, cmd):
+        """Publish the AimDK McLocomotionVelocity command. Created lazily on first live use."""
+        if self._real_pub is None:
+            try:
+                from aimdk_msgs.msg import McLocomotionVelocity
+            except Exception as exc:  # pragma: no cover - robot-only path
+                self.get_logger().error(
+                    f"aimdk_msgs unavailable — cannot publish live velocity: {exc}",
+                    throttle_duration_sec=5.0)
+                return
+            self._McLocomotionVelocity = McLocomotionVelocity
+            self._real_pub = self.create_publisher(
+                McLocomotionVelocity, self._real_topic, command_qos())
+        out = self._McLocomotionVelocity()
+        out.forward_velocity = float(cmd.forward)
+        out.lateral_velocity = 0.0
+        out.angular_velocity = float(cmd.yaw)
+        self._real_pub.publish(out)
 
 
 def main(args=None):

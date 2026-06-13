@@ -4,6 +4,11 @@
 command_source:
   name: x2_terrain_safe_locomotion
   fail_closed_on_register_error: true   # do not publish velocity if registration fails
+  # AimDK SetMcInputSource registration (SDK lx2501_3 v0.9.0.4).
+  service: /aimdk_msgs/srv/SetMcInputSource
+  register_action_value: 1001
+  priority: 40                          # example default; tune vs other sources
+  timeout_ms: 1000
 
 # Max forward velocity allowed per terrain type (m/s). Anything not listed -> stop (0.0).
 velocity_by_terrain:

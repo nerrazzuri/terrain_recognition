@@ -4,12 +4,18 @@ Joint order is never assumed (AGENTS.md §3): the canonical AimDK leg order is l
 right leg, each ``hip_pitch, hip_roll, hip_yaw, knee, ankle_pitch, ankle_roll``. A JointMap
 reorders vectors between an arbitrary simulator joint order and this canonical order, and
 verifies the joint set matches. Limits are loaded from config, never hardcoded here.
+
+Names match the official X2 URDF v1.3.0 (``*_joint`` suffix). The index order of the AimDK
+``aimdk_msgs/msg/JointCommandArray`` for ``/aima/hal/joint/leg/command`` must still be
+confirmed against ``/aima/hal/joint/leg/state`` on the real robot — that runtime check is the
+whole point of this map (use tools/check_joint_order.py).
 """
 from __future__ import annotations
 
 import numpy as np
 
 _PER_LEG = ["hip_pitch", "hip_roll", "hip_yaw", "knee", "ankle_pitch", "ankle_roll"]
+_JOINT_SUFFIX = "_joint"
 
 
 class JointMapError(RuntimeError):
@@ -17,8 +23,8 @@ class JointMapError(RuntimeError):
 
 
 def aimdk_leg_order() -> list[str]:
-    """Canonical 12-DoF leg joint order: left leg then right leg."""
-    return [f"{side}_{j}" for side in ("left", "right") for j in _PER_LEG]
+    """Canonical 12-DoF leg joint order (X2 URDF v1.3.0 names): left leg then right leg."""
+    return [f"{side}_{j}{_JOINT_SUFFIX}" for side in ("left", "right") for j in _PER_LEG]
 
 
 class JointMap:

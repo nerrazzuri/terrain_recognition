@@ -16,9 +16,9 @@ from x2_locomotion.tasks.common import terrain_spec as ts
 def test_aimdk_leg_order_is_12_left_then_right():
     order = jm.aimdk_leg_order()
     assert len(order) == 12
-    assert order[0] == "left_hip_pitch"
-    assert order[6] == "right_hip_pitch"
-    assert order[5] == "left_ankle_roll"
+    assert order[0] == "left_hip_pitch_joint"   # X2 URDF v1.3.0 names
+    assert order[6] == "right_hip_pitch_joint"
+    assert order[5] == "left_ankle_roll_joint"
 
 
 def test_round_trip_sim_to_aimdk_and_back():
