@@ -2,7 +2,7 @@
 
 **Plan source of truth:** [x2_terrain_stair_climbing_roadmap.md](x2_terrain_stair_climbing_roadmap.md)
 **This file:** living checklist of every module and task. Update each task's status box as work progresses.
-**Last updated:** 2026-06-13 — Phase 0 complete (foundation, shared lib, configs).
+**Last updated:** 2026-06-14 — All phases scaffolded P0-P6; 172 tests passing. Software-complete items marked [x]; sim/hardware/training-dependent items marked [~]/[!] with blockers.
 
 ---
 
@@ -39,10 +39,10 @@
 | P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 5 | Logic done; sim blocked (Isaac Lab + assets) |
 | P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 6 | Logic done; training blocked (Isaac Lab/GPU/torch) |
 | P5 — Sim-to-Real Deployment | **High** | Trained | 3 | 14 | 6 | Runtime logic done; hardware gated/blocked |
-| P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 0 | Not started |
-| **Total** | | | **24** | **89** | **45** | |
+| P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 1 | Architecture scaffolded; training blocked |
+| **Total** | | | **24** | **89** | **46** | |
 
-**Current focus:** P1 — the First Sprint (perceive terrain & stop safely). P0 foundation is complete. See the [First Sprint](#first-sprint-2-weeks) section and roadmap §13.
+**Current focus:** Software for P0-P2 is complete (perceive terrain & stop safely — the First Sprint). P3-P6 logic is implemented + unit-tested; their sim/training/hardware execution is blocked on Isaac Lab + GPU + torch + the X2 USD asset + the physical robot (see per-task blockers).
 
 ---
 
@@ -222,26 +222,26 @@
 > **Goal:** upgrade the height-map policy → raw-depth recurrent cross-modal fusion (CReF). **Start only after the Phase 4 height-map policy works.** Prefer distillation (Option A) first.
 
 ## Module 6.1 — Data & Encoders
-- `[ ]` **P6-M1-T1** Raw-depth dataset collector from simulation.
-- `[ ]` **P6-M1-T2** Depth encoder (patch embedding / CNN → depth tokens).
+- `[~]` **P6-M1-T1** Raw-depth dataset collector from simulation. *`cref/raw_depth_dataset.py` record schema + DepthSample defined; **collection blocked on Isaac Lab + Phase 4 teacher checkpoint**.*
+- `[~]` **P6-M1-T2** Depth encoder (patch embedding / CNN → depth tokens). *`cref/depth_encoder.py` (torch); **blocked to run on torch**.*
 
 ## Module 6.2 — Fusion Network
-- `[ ]` **P6-M2-T1** Cross-modal attention (proprio query attends to depth tokens).
-- `[ ]` **P6-M2-T2** GRU recurrent fusion + actor head.
-- `[ ]` **P6-M2-T3** Auxiliary heads: terrain type, height reconstruction, safe-foothold probability, depth validity mask.
+- `[~]` **P6-M2-T1** Cross-modal attention (proprio query attends to depth tokens). *`cref/cross_modal_attention.py` (torch MultiheadAttention); blocked to run.*
+- `[~]` **P6-M2-T2** GRU recurrent fusion + actor head. *`cref/gru_fusion.py`; assembled in `cref/cref_policy.py`; blocked to run.*
+- `[~]` **P6-M2-T3** Auxiliary heads: terrain type, height reconstruction, safe-foothold probability, depth validity mask. *`cref/aux_heads.py`; blocked to run.*
 
 ## Module 6.3 — Training
-- `[ ]` **P6-M3-T1** Depth augmentation (dropout, missing pixels, reflective/edge noise, motion blur, pitch/roll offset, latency, extrinsic error, FoV crop, near/far clipping).
-- `[ ]` **P6-M3-T2** Teacher-student distillation pipeline (teacher = height-map policy; loss = action + value imitation + aux terrain prediction).
-- `[ ]` **P6-M3-T3** Fine-tune with PPO after distillation.
-- `[ ]` **P6-M3-T4** Train raw-depth policy in simulation.
+- `[x]` **P6-M3-T1** Depth augmentation (dropout, missing pixels, reflective/edge noise, motion blur, pitch/roll offset, latency, extrinsic error, FoV crop, near/far clipping). *`cref/depth_augmentation.py` pure numpy; 7 unit tests (dropout fraction, NaN missing, clip bounds, seeded reproducible).*
+- `[~]` **P6-M3-T2** Teacher-student distillation pipeline (teacher = height-map policy; loss = action + value imitation + aux terrain prediction). *`cref/distillation.py` loss + weights defined; **blocked to run on torch**.*
+- `[~]` **P6-M3-T3** Fine-tune with PPO after distillation. *`scripts/train_cref.py --phase finetune`; blocked.*
+- `[~]` **P6-M3-T4** Train raw-depth policy in simulation. *`scripts/train_cref.py`; **blocked on torch + Isaac Lab + teacher**.*
 
 ## Module 6.4 — Evaluation & Deploy
-- `[ ]` **P6-M4-T1** Compare vs height-map policy (clutter / gaps / platforms).
-- `[ ]` **P6-M4-T2** Deploy through the **same Phase 5 safety protocol** (suspended → foam → low step → stairs).
+- `[!]` **P6-M4-T1** Compare vs height-map policy (clutter / gaps / platforms). **BLOCKED: needs both trained policies.**
+- `[!]` **P6-M4-T2** Deploy through the **same Phase 5 safety protocol** (suspended → foam → low step → stairs). **BLOCKED: hardware + approval flag + documented safety review.**
 
 ### ✅ Phase 6 Definition of Done
-- `[ ]` Raw-depth policy ≥ height-map policy in sim · survives depth noise/latency · generalizes better to clutter/gaps/platforms · suspended tests pass · low-obstacle + single-step tests pass · stairs follow the Phase 5 protocol.
+- `[~]` Raw-depth policy ≥ height-map policy in sim · survives depth noise/latency · generalizes better to clutter/gaps/platforms · suspended tests pass · low-obstacle + single-step tests pass · stairs follow the Phase 5 protocol. *Full CReF architecture (depth encoder → cross-modal attention → GRU fusion → aux heads) + distillation loss + depth augmentation implemented; **training + comparison + deploy blocked on torch + Isaac Lab + the Phase 4 teacher policy + hardware**. Per roadmap §10.1, start only after the Phase 4 height-map policy works.*
 
 ---
 
