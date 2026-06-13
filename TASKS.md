@@ -37,10 +37,10 @@
 | P1 — Terrain Awareness | Low | No | 4 | 17 | 15 | Code done (2 blocked on hardware bags) |
 | P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 8 | Code done (on-robot tests blocked) |
 | P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 5 | Logic done; sim blocked (Isaac Lab + assets) |
-| P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 0 | Not started |
+| P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 6 | Logic done; training blocked (Isaac Lab/GPU/torch) |
 | P5 — Sim-to-Real Deployment | **High** | Trained | 3 | 14 | 0 | Not started |
 | P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 0 | Not started |
-| **Total** | | | **24** | **89** | **33** | |
+| **Total** | | | **24** | **89** | **39** | |
 
 **Current focus:** P1 — the First Sprint (perceive terrain & stop safely). P0 foundation is complete. See the [First Sprint](#first-sprint-2-weeks) section and roadmap §13.
 
@@ -156,36 +156,36 @@
 > Action space: start **12-DoF legs only** (joint position offsets). Expand to +3 waist (+arms for balance) only after legs work. Timing: physics 200 Hz, policy 50 Hz, decimation 4.
 
 ## Module 4.1 — Training Infrastructure
-- `[ ]` **P4-M1-T1** PPO training config + `scripts/train.py` (512 envs → 1024 if stable; camera rendering off for height-map version).
-- `[ ]` **P4-M1-T2** `observations.py` — sim observation builder (cmd vel ×3, base ang vel, projected gravity, joint pos err, joint vel, prev action, gait phase sin/cos, height samples 11×11=121). Normalize all.
-- `[ ]` **P4-M1-T3** Network: height_encoder + proprio_encoder + actor + critic (privileged) per §8.6.
+- `[~]` **P4-M1-T1** PPO training config + `scripts/train.py` (512 envs → 1024 if stable; camera rendering off for height-map version). *`training_default.yaml` complete; `train.py` arg/config wiring done; **rsl_rl launch blocked on Isaac Lab + GPU**.*
+- `[x]` **P4-M1-T2** `observations.py` — sim observation builder (cmd vel ×3, base ang vel, projected gravity, joint pos err, joint vel, prev action, gait phase sin/cos, height samples 11×11=121). Normalize all. *Pure numpy; dim=168 contract; 6 unit tests (order, missing/dim guards, normalizer zero-std guard). Shared with deployment.*
+- `[~]` **P4-M1-T3** Network: height_encoder + proprio_encoder + actor + critic (privileged) per §8.6. *`network.py` exact architecture; **blocked to run on torch**.*
 
 ## Module 4.2 — Rewards & Terminations
-- `[ ]` **P4-M2-T1** `rewards.py` — separately logged components: velocity tracking, torso stability, foot clearance, foothold quality, foot slip, energy/smoothness, joint safety.
-- `[ ]` **P4-M2-T2** `terminations.py` — fall/collision: base too low, roll/pitch too high, head/torso/knee collision, invalid contact.
-- `[ ]` **P4-M2-T3** `curriculum.py` — curriculum manager across stages A–G.
-- `[ ]` **P4-M2-T4** `domain_randomization.py` — mass/inertia/CoM, motor strength, PD, action delay, sensor latency, IMU noise, depth/heightmap noise, friction, encoder noise (§8.10).
+- `[x]` **P4-M2-T1** `rewards.py` — separately logged components: velocity tracking, torso stability, foot clearance, foothold quality, foot slip, energy/smoothness, joint safety. *Pure functions; 4 unit tests.*
+- `[x]` **P4-M2-T2** `terminations.py` — fall/collision: base too low, roll/pitch too high, head/torso/knee collision, invalid contact. *4 unit tests.*
+- `[x]` **P4-M2-T3** `curriculum.py` — curriculum manager across stages A–G. *4 unit tests (advance/hold/complete).*
+- `[x]` **P4-M2-T4** `domain_randomization.py` — mass/inertia/CoM, motor strength, PD, action delay, sensor latency, IMU noise, depth/heightmap noise, friction, encoder noise (§8.10). *Seedable; 2 unit tests (within-range, reproducible).*
 
 ## Module 4.3 — Curriculum Tasks
-- `[ ]` **P4-M3-T1** Stage A — standing (`x2_standing_env_cfg.py`): stand 30 s, recover small pushes.
-- `[ ]` **P4-M3-T2** Stage B — flat walking (`x2_flat_walk_env_cfg.py`): fwd 0–0.3 m/s, yaw ±0.3 rad/s.
-- `[ ]` **P4-M3-T3** Stage C — rough terrain (`x2_rough_env_cfg.py`): 1–5 cm noise, mild slopes.
-- `[ ]` **P4-M3-T4** Stage D — single step / curb: 2→5→8→12→15 cm.
-- `[ ]` **P4-M3-T5** Stage E — stairs up (`x2_stairs_env_cfg.py`): rise 5–18 cm, tread 24–35 cm, 1–8 steps.
-- `[ ]` **P4-M3-T6** Stage F — stairs down: rise 5–15 cm, tread 24–35 cm.
-- `[ ]` **P4-M3-T7** Stage G — mixed terrain generalization.
+- `[~]` **P4-M3-T1** Stage A — standing (`x2_standing_env_cfg.py`): stand 30 s, recover small pushes. *Env cfg scaffolded; **blocked on Isaac Lab + asset**.*
+- `[~]` **P4-M3-T2** Stage B — flat walking (`x2_flat_walk_env_cfg.py`): fwd 0–0.3 m/s, yaw ±0.3 rad/s. *Scaffolded; blocked.*
+- `[~]` **P4-M3-T3** Stage C — rough terrain (`x2_rough_env_cfg.py`): 1–5 cm noise, mild slopes. *Scaffolded; blocked.*
+- `[~]` **P4-M3-T4** Stage D — single step / curb: 2→5→8→12→15 cm. *In `x2_stairs_env_cfg` + terrain_spec level 3; blocked.*
+- `[~]` **P4-M3-T5** Stage E — stairs up (`x2_stairs_env_cfg.py`): rise 5–18 cm, tread 24–35 cm, 1–8 steps. *Scaffolded (terrain_spec level 4); blocked.*
+- `[~]` **P4-M3-T6** Stage F — stairs down: rise 5–15 cm, tread 24–35 cm. *terrain_spec level 5; blocked.*
+- `[~]` **P4-M3-T7** Stage G — mixed terrain generalization. *terrain_spec level 6; blocked.*
 
 ## Module 4.4 — Evaluation & Export
-- `[ ]` **P4-M4-T1** `scripts/play.py` + `evaluate_policy.py` — success-rate reports.
-- `[ ]` **P4-M4-T2** `scripts/inspect_observation.py` — observation sanity inspection.
-- `[ ]` **P4-M4-T3** `scripts/export_onnx.py` — ONNX export.
-- `[ ]` **P4-M4-T4** PyTorch-vs-ONNX numerical validation on test vectors.
+- `[~]` **P4-M4-T1** `scripts/play.py` + `evaluate_policy.py` — success-rate reports. *`check_graduation` pure + 3 unit tests; **rollouts blocked on Isaac Lab + checkpoint**.*
+- `[x]` **P4-M4-T2** `scripts/inspect_observation.py` — observation sanity inspection. *Runnable without torch; verifies the 168-dim layout.*
+- `[~]` **P4-M4-T3** `scripts/export_onnx.py` — ONNX export. *Export wiring + `numeric_match`; **blocked to run on torch/onnxruntime**.*
+- `[~]` **P4-M4-T4** PyTorch-vs-ONNX numerical validation on test vectors. *`numeric_match` pure + 3 unit tests; **full validation blocked on torch**.*
 
 ## Module 4.5 — Graduation Gate
-- `[ ]` **P4-M5-T1** Confirm acceptance: flat >95%, rough >90%, 5 cm step >90%, 10 cm step >80%, stair-up >80% · no joint-limit abuse · no unrealistic torque reliance · smooth actions · survives randomized latency/noise.
+- `[~]` **P4-M5-T1** Confirm acceptance: flat >95%, rough >90%, 5 cm step >90%, 10 cm step >80%, stair-up >80% · no joint-limit abuse · no unrealistic torque reliance · smooth actions · survives randomized latency/noise. *`GRADUATION_THRESHOLDS` + `check_graduation` tested; **actual confirmation blocked on training**.*
 
 ### ✅ Phase 4 Definition of Done
-- `[ ]` PPO pipeline reproducible · height-map policy walks + handles rough terrain · single-step + stair-up curriculum shows measurable success · eval script produces success-rate reports · ONNX export numerically checked vs PyTorch.
+- `[~]` PPO pipeline reproducible · height-map policy walks + handles rough terrain · single-step + stair-up curriculum shows measurable success · eval script produces success-rate reports · ONNX export numerically checked vs PyTorch. *All training **logic** (obs/rewards/terminations/curriculum/DR/graduation/numeric-check) implemented + unit-tested; **training run + ONNX export blocked on Isaac Lab + GPU + torch + X2 asset**.*
 
 ---
 
