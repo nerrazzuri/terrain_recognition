@@ -35,12 +35,12 @@
 |-------|------|----------|:---:|:---:|:---:|--------|
 | P0 — Foundation / Repo setup | — | No | 2 | 5 | 5 | ✅ Done |
 | P1 — Terrain Awareness | Low | No | 4 | 17 | 15 | Code done (2 blocked on hardware bags) |
-| P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 0 | Not started |
+| P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 8 | Code done (on-robot tests blocked) |
 | P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 0 | Not started |
 | P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 0 | Not started |
 | P5 — Sim-to-Real Deployment | **High** | Trained | 3 | 14 | 0 | Not started |
 | P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 0 | Not started |
-| **Total** | | | **24** | **89** | **20** | |
+| **Total** | | | **24** | **89** | **28** | |
 
 **Current focus:** P1 — the First Sprint (perceive terrain & stop safely). P0 foundation is complete. See the [First Sprint](#first-sprint-2-weeks) section and roadmap §13.
 
@@ -101,28 +101,27 @@
 > Publishes to `/aima/mc/locomotion/velocity` (fields: source, forward, lateral, angular). The command source must be registered before publishing.
 
 ## Module 2.1 — Command Source & Velocity
-- `[ ]` **P2-M1-T1** `input_source_registrar.py` — register source `x2_terrain_safe_locomotion`, check priority, prevent name collision.
-  - *AC:* registers before publisher starts · fails closed on failure · logs source/priority.
-- `[ ]` **P2-M1-T2** `velocity_adapter.py` — map desired → safe velocity by terrain type; stop before stairs/gaps/unknown; smooth. Policy: flat ≤0.12, rough ≤0.06, mild slope ≤0.04 m/s; curb/stairs/gap/unknown → stop.
-  - *AC:* walks slowly on flat · slows + stops before stairs · smooth not jerky · zero velocity within watchdog if perception stops.
-- `[ ]` **P2-M1-T3** `command_smoother.py` — ramp limits (fwd accel 0.05 m/s², yaw 0.10 rad/s²); emergency = immediate zero.
+- `[~]` **P2-M1-T1** `input_source_registrar.py` — register source `x2_terrain_safe_locomotion`, check priority, prevent name collision.
+  - *AC:* registers before publisher starts · fails closed on failure · logs source/priority. *Node + fail-closed logic done; `register_source()` returns False until the real AimDK API is wired (isolated, documented). Adapter won't publish live without it.*
+- `[x]` **P2-M1-T2** `velocity_adapter.py` — map desired → safe velocity by terrain type; stop before stairs/gaps/unknown; smooth. Policy: flat ≤0.12, rough ≤0.06, mild slope ≤0.04 m/s; curb/stairs/gap/unknown → stop. *core.velocity_policy (9 tests); dry-run default; stale-perception watchdog zeros velocity.*
+- `[x]` **P2-M1-T3** `command_smoother.py` — ramp limits (fwd accel 0.05 m/s², yaw 0.10 rad/s²); emergency = immediate zero. *core.smoother (3 tests).*
 
 ## Module 2.2 — Safety Layer
-- `[ ]` **P2-M2-T1** `motion_state_monitor.py` — track robot mode/state plus command + perception freshness.
-- `[ ]` **P2-M2-T2** `safety_supervisor.py` — hard stop on: terrain_status >0.5 s missing · IMU >0.2 s missing · roll/pitch over threshold · unknown/stairs/gap ahead · operator stop · command timeout · unexpected mode.
-  - *AC:* any missing critical input → stop · reason logged · manual e-stop overrides all.
-- `[ ]` **P2-M2-T3** `emergency_stop_node.py` — operator manual e-stop, highest priority.
+- `[x]` **P2-M2-T1** `motion_state_monitor.py` — track robot mode/state plus command + perception freshness.
+- `[x]` **P2-M2-T2** `safety_supervisor.py` — hard stop on: terrain_status >0.5 s missing · IMU >0.2 s missing · roll/pitch over threshold · unknown/stairs/gap ahead · operator stop · command timeout · unexpected mode.
+  - *AC:* any missing critical input → stop · reason logged · manual e-stop overrides all. *core.supervisor (9 tests, every stop condition + e-stop override).*
+- `[x]` **P2-M2-T3** `emergency_stop_node.py` — operator manual e-stop, highest priority. *Latching; stays engaged until explicit reset.*
 
 ## Module 2.3 — Tests & Demo
-- `[ ]` **P2-M3-T1** Dry-run mode — publish to debug topic only (no real velocity).
-- `[ ]` **P2-M3-T2** Flat-ground walking test (0.05 m/s).
-- `[ ]` **P2-M3-T3** Stair/curb-stop test (must stop before first step).
-- `[ ]` **P2-M3-T4** Missing-sensor watchdog test.
-- `[ ]` **P2-M3-T5** Manual emergency-stop test.
-- `[ ]` **P2-M3-T6** Demo script: walk forward → slow → stop before stairs, with logged stop reason.
+- `[x]` **P2-M3-T1** Dry-run mode — publish to debug topic only (no real velocity). *Default; real topic only when dry_run off AND source registered.*
+- `[!]` **P2-M3-T2** Flat-ground walking test (0.05 m/s). **BLOCKED: requires physical robot.**
+- `[!]` **P2-M3-T3** Stair/curb-stop test (must stop before first step). **BLOCKED: requires physical robot.**
+- `[~]` **P2-M3-T4** Missing-sensor watchdog test. *Watchdog logic unit-tested (FreshnessWatchdog + supervisor); node-level integration test needs a ROS2 runtime.*
+- `[!]` **P2-M3-T5** Manual emergency-stop test. **BLOCKED: requires physical robot / ROS2 runtime.** Latching e-stop logic in place.
+- `[x]` **P2-M3-T6** Demo script: walk forward → slow → stop before stairs, with logged stop reason. *`launch/safe_stop_demo.launch.py` (dry-run); SafetyDecision carries the stop reason.*
 
 ### ✅ Phase 2 Definition of Done
-- `[ ]` Source registration works · safe adapter commands slow walking · X2 stops before stairs/gaps/unknown · watchdog stop works · manual stop works · logs prove the stop came from terrain perception.
+- `[~]` Source registration works · safe adapter commands slow walking · X2 stops before stairs/gaps/unknown · watchdog stop works · manual stop works · logs prove the stop came from terrain perception. *Logic + dry-run pipeline complete and unit-tested; **on-robot walking/stop tests + AimDK source registration blocked on hardware + SDK.***
 
 ---
 
@@ -260,8 +259,8 @@
 - `[x]` P1-M3-T1 — `stair_detector.py`
 - `[x]` P1-M4-T1 — `tools/record_terrain_bag.sh`
 - `[x]` P1-M4-T2 — `tools/visualize_heightmap.py`
-- `[ ]` P2-M1-T2 — `velocity_adapter.py`
-- `[ ]` P2-M2-T2 — `safety_supervisor.py`
+- `[x]` P2-M1-T2 — `velocity_adapter.py`
+- `[x]` P2-M2-T2 — `safety_supervisor.py`
 
 **Sprint demo:** flat ground → live height map → place box/curb/stair → X2 classifies unsafe terrain → start slow forward → X2 slows + stops before obstacle → log shows the stop reason.
 
