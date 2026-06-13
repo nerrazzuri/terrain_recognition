@@ -1,0 +1,280 @@
+# X2 Terrain & Stair-Climbing — Modules & Task Tracker
+
+**Plan source of truth:** [x2_terrain_stair_climbing_roadmap.md](x2_terrain_stair_climbing_roadmap.md)
+**This file:** living checklist of every module and task. Update each task's status box as work progresses.
+**Last updated:** 2026-06-13
+
+---
+
+## How to use this file
+
+- Each task has a **stable ID** (e.g. `P1-M2-T1`) — reference it in commits/PRs.
+- Update the **status box**: `[ ]` → `[~]` → `[x]` (or `[!]` if blocked; note the blocker inline).
+- **DoD** = phase Definition of Done — a gate that must pass before the next phase starts.
+- **Do not skip phase gates.** Real stair climbing is forbidden until the Phase 5 documented safety review passes.
+- To expand any task into a full work item, use the roadmap §11 template (Goal / Files / Implementation / Safety / Tests / Acceptance / Notes).
+
+### Status legend
+| Box | Meaning |
+|-----|---------|
+| `[ ]` | Not started |
+| `[~]` | In progress |
+| `[x]` | Done + verified against acceptance criteria |
+| `[!]` | Blocked (note the blocker inline) |
+
+### Global safety flag
+| Flag | Value | Notes |
+|------|-------|-------|
+| `REAL_ROBOT_LOW_LEVEL_LEG_POLICY_APPROVED` | **false** | Must stay false until the Phase 5 documented safety review. Roadmap §14. While false: policy nodes run dry-run only, publish debug only, no `/aima/hal/joint/leg/command` — only SDK velocity control via the safe adapter. |
+
+---
+
+## Progress overview
+
+| Phase | Risk | Training | Modules | Tasks | Done | Status |
+|-------|------|----------|:---:|:---:|:---:|--------|
+| P0 — Foundation / Repo setup | — | No | 2 | 5 | 0 | Not started |
+| P1 — Terrain Awareness | Low | No | 4 | 17 | 0 | Not started |
+| P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 0 | Not started |
+| P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 0 | Not started |
+| P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 0 | Not started |
+| P5 — Sim-to-Real Deployment | **High** | Trained | 3 | 14 | 0 | Not started |
+| P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 0 | Not started |
+| **Total** | | | **24** | **89** | **0** | |
+
+**Current focus:** P0 + P1 — the First Sprint (perceive terrain & stop safely). See the [First Sprint](#first-sprint-2-weeks) section and roadmap §13.
+
+---
+
+# Phase 0 — Foundation & Repository Setup
+*Prerequisite for everything. Establishes the repo skeleton from roadmap §3.*
+
+## Module 0.1 — Repo & Docs Skeleton
+- `[ ]` **P0-M1-T1** Create the `x2_terrain_locomotion/` tree from roadmap §3: `docs/`, `ros2_ws/src/`, `training/`, `tools/`, `configs/`, `tests/{unit,integration,simulation,hardware_dry_run}`.
+- `[ ]` **P0-M1-T2** Seed top-level docs: `README.md`, `ROADMAP.md` (link to roadmap), `SAFETY.md` (copy §1 + §14), `TASKS.md` (this file).
+- `[ ]` **P0-M1-T3** Seed `docs/`: `architecture.md`, `ros_topics.md`, `data_contracts.md`, `training_method.md`, `real_robot_test_protocol.md`, `sim_to_real_checklist.md`, `known_risks.md`.
+
+## Module 0.2 — Shared Library & Configs
+- `[ ]` **P0-M2-T1** Create `x2_common` package: `topic_discovery.py`, `time_sync.py`, `transforms.py`, `qos_profiles.py`, `config_loader.py`, `logging_utils.py`, `safety_limits.py` (+ `package.xml`, `setup.py`).
+- `[ ]` **P0-M2-T2** Create base config files: `robot_topics.yaml`, `terrain_perception.yaml`, `safe_locomotion.yaml`, `safety_limits.yaml`, `joint_limits_x2_ultra.yaml`, `training_default.yaml`.
+
+---
+
+# Phase 1 — Terrain Awareness  *(Risk: Low · No training)*
+> **Goal:** perception-only. X2 stands still, classifies terrain ahead, and publishes terrain type + height/tread/slope estimates + safety decision. **No locomotion commands in this phase.**
+>
+> **Target classes:** flat_ground · rough_ground · slope_up · slope_down · curb_or_single_step · stairs_up · stairs_down · gap_or_hole · platform · unknown_unsafe.
+
+## Module 1.1 — Custom Messages & Workspace
+- `[ ]` **P1-M1-T1** Create the ROS2 workspace skeleton (`ros2_ws/src/...` packages with `package.xml` / `setup.py`).
+- `[ ]` **P1-M1-T2** Define `x2_terrain_msgs`: `TerrainCell.msg`, `TerrainGrid.msg`, `TerrainStatus.msg`, `StairEstimate.msg`, `SafetyDecision.msg`, `PolicyDebug.msg`, `srv/ResetTerrainMap.srv` (fields per roadmap §5.3).
+- `[ ]` **P1-M1-T3** Build `topic_discovery.py` + `tools/check_topics.sh` / `check_qos.sh`; verify real topics with `ros2 topic list` / `ros2 topic info -v`.
+
+## Module 1.2 — Point Cloud → Height Map Pipeline
+- `[ ]` **P1-M2-T1** `pointcloud_projector.py` — subscribe RGB-D/LiDAR cloud, transform to base frame, drop NaNs, crop ROI (x 0–2 m, y ±0.8 m, z −0.5–1.0 m), voxel downsample.
+  - *AC:* ≥8 Hz from 10 Hz input · drops invalid points · publishes in/out point counts · survives 2 s of missing cloud.
+- `[ ]` **P1-M2-T2** `ground_plane_estimator.py` — RANSAC / robust least squares + IMU prior → plane normal, height offset, confidence.
+  - *AC:* flat ±2° · ramp directionally correct · confidence drops / multi-plane on stairs.
+- `[ ]` **P1-M2-T3** `heightmap_node.py` — robot-centered elevation map (2.0×1.6 m, 0.04 m res = 50×40 cells, 10 Hz, 0.5 s decay), per-cell confidence, debug viz.
+  - *AC:* stable when stationary · 10–15 cm step at correct height · unknown cells marked unknown (not flat) · unit tests for coord conversion + grid indexing.
+- `[ ]` **P1-M2-T4** `slope_detector.py` — slope angle + up/down direction from ground plane / height map.
+
+## Module 1.3 — Terrain Feature Detectors
+- `[ ]` **P1-M3-T1** `stair_detector.py` — detect repeated horizontal planes + vertical risers; estimate rise/tread, first-step distance, recommended stop distance, confidence.
+  - *AC:* detects clear stairs stationary · rejects clutter lacking repeated structure · first-step distance within safe-stop tolerance · never `safe_to_continue=true` under uncertainty.
+- `[ ]` **P1-M3-T2** `gap_detector.py` — detect holes/drop-offs from missing/lower cells; estimate width + distance.
+  - *AC:* detects open gap · treats unknown region as unsafe unless high confidence · publishes reason string.
+- `[ ]` **P1-M3-T3** `traversability_estimator.py` — per-cell traversability feeding the height map `traversability[]` field.
+- `[ ]` **P1-M3-T4** `terrain_classifier.py` — fuse ground/heightmap/stair/slope/gap → final terrain type + confidence + reason (decision policy §5.4).
+
+## Module 1.4 — Tooling, Data & Tests
+- `[ ]` **P1-M4-T1** `tools/record_terrain_bag.sh` — record depth image, depth cloud, LiDAR cloud, IMU, TF, joint state.
+- `[ ]` **P1-M4-T2** `tools/visualize_heightmap.py` + `visualization_node.py` — live height-map view.
+- `[ ]` **P1-M4-T3** `offline_bag_analyzer.py` + `tools/replay_bag_heightmap.py` — replay bags through the pipeline offline.
+- `[ ]` **P1-M4-T4** Unit tests: grid coordinate conversion, grid indexing, terrain-classification decision logic.
+- `[ ]` **P1-M4-T5** Record real terrain bags: flat, carpet, reflective, curb 5/10/15 cm, stairs up, stairs down, platform edge, gap mockup, cluttered unsafe.
+- `[ ]` **P1-M4-T6** Validate detection on each offline bag scene.
+
+### ✅ Phase 1 Definition of Done
+- `[ ]` Perception runs at 8–10 Hz · height map visualized live · flat/slope/curb/stairs/gap detected in offline bags · `unknown_unsafe` used correctly · **no locomotion commands sent** · logs saved per test.
+
+---
+
+# Phase 2 — Safe SDK Locomotion Adaptation  *(Risk: Low/Medium · No training)*
+> **Goal:** use the AimDK velocity API to walk slowly on known flat terrain and **stop before unsafe terrain**. **Still does not climb stairs.** First demo / customer milestone.
+>
+> Publishes to `/aima/mc/locomotion/velocity` (fields: source, forward, lateral, angular). The command source must be registered before publishing.
+
+## Module 2.1 — Command Source & Velocity
+- `[ ]` **P2-M1-T1** `input_source_registrar.py` — register source `x2_terrain_safe_locomotion`, check priority, prevent name collision.
+  - *AC:* registers before publisher starts · fails closed on failure · logs source/priority.
+- `[ ]` **P2-M1-T2** `velocity_adapter.py` — map desired → safe velocity by terrain type; stop before stairs/gaps/unknown; smooth. Policy: flat ≤0.12, rough ≤0.06, mild slope ≤0.04 m/s; curb/stairs/gap/unknown → stop.
+  - *AC:* walks slowly on flat · slows + stops before stairs · smooth not jerky · zero velocity within watchdog if perception stops.
+- `[ ]` **P2-M1-T3** `command_smoother.py` — ramp limits (fwd accel 0.05 m/s², yaw 0.10 rad/s²); emergency = immediate zero.
+
+## Module 2.2 — Safety Layer
+- `[ ]` **P2-M2-T1** `motion_state_monitor.py` — track robot mode/state plus command + perception freshness.
+- `[ ]` **P2-M2-T2** `safety_supervisor.py` — hard stop on: terrain_status >0.5 s missing · IMU >0.2 s missing · roll/pitch over threshold · unknown/stairs/gap ahead · operator stop · command timeout · unexpected mode.
+  - *AC:* any missing critical input → stop · reason logged · manual e-stop overrides all.
+- `[ ]` **P2-M2-T3** `emergency_stop_node.py` — operator manual e-stop, highest priority.
+
+## Module 2.3 — Tests & Demo
+- `[ ]` **P2-M3-T1** Dry-run mode — publish to debug topic only (no real velocity).
+- `[ ]` **P2-M3-T2** Flat-ground walking test (0.05 m/s).
+- `[ ]` **P2-M3-T3** Stair/curb-stop test (must stop before first step).
+- `[ ]` **P2-M3-T4** Missing-sensor watchdog test.
+- `[ ]` **P2-M3-T5** Manual emergency-stop test.
+- `[ ]` **P2-M3-T6** Demo script: walk forward → slow → stop before stairs, with logged stop reason.
+
+### ✅ Phase 2 Definition of Done
+- `[ ]` Source registration works · safe adapter commands slow walking · X2 stops before stairs/gaps/unknown · watchdog stop works · manual stop works · logs prove the stop came from terrain perception.
+
+---
+
+# Phase 3 — X2 Simulation Model  *(Risk: None · No training yet)*
+> **Goal:** build a simulation accurate enough to train/test before touching real hardware. Primary: **Isaac Lab**; secondary: MuJoCo. No RL stair policy before this is stable.
+
+## Module 3.1 — Robot Model Assets
+- `[ ]` **P3-M1-T1** Locate/collect X2 URDF/MJCF, meshes, joint names/order/limits, default pose, mass, inertia, foot collision, torque/velocity limits, PD estimates, actuator delay, self-collision pairs (roadmap §7.2).
+- `[ ]` **P3-M1-T2** Convert model to an Isaac Lab asset (`x2.usd`); place under `training/isaac_lab/assets/`.
+
+## Module 3.2 — Config & Validation
+- `[ ]` **P3-M2-T1** `x2_joint_map.py` — map sim joints ↔ AimDK order (legs: L then R; hip_pitch/roll/yaw, knee, ankle_pitch/roll).
+  - *AC:* names printed + compared sim vs robot · L/R order verified · rad/deg verified · limits from config, not hardcoded.
+- `[ ]` **P3-M2-T2** `tools/check_joint_order.py` — joint-order verification tool.
+- `[ ]` **P3-M2-T3** Joint limit config `joint_limits_x2_ultra.yaml`.
+- `[ ]` **P3-M2-T4** `x2_actuator_cfg.py` — actuator / PD parameters.
+- `[ ]` **P3-M2-T5** `x2_robot_cfg.py` — asset path, default pose, base height, limits, PD gains, contact/termination bodies, feet names.
+  - *AC:* spawns without exploding · stands under gravity w/ stable PD · feet contact correct · no major mesh/collision mismatch.
+
+## Module 3.3 — Environments & Terrain
+- `[ ]` **P3-M3-T1** `x2_standing_env_cfg.py` — flat ground, standing target, low disturbance, terminate on fall.
+  - *AC:* stands 30 s w/ fixed PD · reasonable contact forces · stable base height/orientation.
+- `[ ]` **P3-M3-T2** `terrain_generator.py` — progressive levels 0–6 (flat → rough → slope → single step → stairs up → stairs down → mixed) with params from §7.4.
+- `[ ]` **P3-M3-T3** Height-sample extraction around the robot in sim.
+- `[ ]` **P3-M3-T4** Simulation smoke tests (`tests/simulation/`), runnable locally / in CI.
+
+### ✅ Phase 3 Definition of Done
+- `[ ]` X2 spawns and stands in sim · joint ordering verified vs AimDK · terrain generator exists · height samples extractable · basic sim tests run.
+
+---
+
+# Phase 4 — RL Locomotion Training  *(Risk: Sim only · Training required)*
+> **Goal:** PPO (asymmetric actor-critic) height-map policy. Curriculum: standing → flat walk → rough → single step → stairs up → stairs down → mixed. **Height-map input first, not raw depth.**
+>
+> Action space: start **12-DoF legs only** (joint position offsets). Expand to +3 waist (+arms for balance) only after legs work. Timing: physics 200 Hz, policy 50 Hz, decimation 4.
+
+## Module 4.1 — Training Infrastructure
+- `[ ]` **P4-M1-T1** PPO training config + `scripts/train.py` (512 envs → 1024 if stable; camera rendering off for height-map version).
+- `[ ]` **P4-M1-T2** `observations.py` — sim observation builder (cmd vel ×3, base ang vel, projected gravity, joint pos err, joint vel, prev action, gait phase sin/cos, height samples 11×11=121). Normalize all.
+- `[ ]` **P4-M1-T3** Network: height_encoder + proprio_encoder + actor + critic (privileged) per §8.6.
+
+## Module 4.2 — Rewards & Terminations
+- `[ ]` **P4-M2-T1** `rewards.py` — separately logged components: velocity tracking, torso stability, foot clearance, foothold quality, foot slip, energy/smoothness, joint safety.
+- `[ ]` **P4-M2-T2** `terminations.py` — fall/collision: base too low, roll/pitch too high, head/torso/knee collision, invalid contact.
+- `[ ]` **P4-M2-T3** `curriculum.py` — curriculum manager across stages A–G.
+- `[ ]` **P4-M2-T4** `domain_randomization.py` — mass/inertia/CoM, motor strength, PD, action delay, sensor latency, IMU noise, depth/heightmap noise, friction, encoder noise (§8.10).
+
+## Module 4.3 — Curriculum Tasks
+- `[ ]` **P4-M3-T1** Stage A — standing (`x2_standing_env_cfg.py`): stand 30 s, recover small pushes.
+- `[ ]` **P4-M3-T2** Stage B — flat walking (`x2_flat_walk_env_cfg.py`): fwd 0–0.3 m/s, yaw ±0.3 rad/s.
+- `[ ]` **P4-M3-T3** Stage C — rough terrain (`x2_rough_env_cfg.py`): 1–5 cm noise, mild slopes.
+- `[ ]` **P4-M3-T4** Stage D — single step / curb: 2→5→8→12→15 cm.
+- `[ ]` **P4-M3-T5** Stage E — stairs up (`x2_stairs_env_cfg.py`): rise 5–18 cm, tread 24–35 cm, 1–8 steps.
+- `[ ]` **P4-M3-T6** Stage F — stairs down: rise 5–15 cm, tread 24–35 cm.
+- `[ ]` **P4-M3-T7** Stage G — mixed terrain generalization.
+
+## Module 4.4 — Evaluation & Export
+- `[ ]` **P4-M4-T1** `scripts/play.py` + `evaluate_policy.py` — success-rate reports.
+- `[ ]` **P4-M4-T2** `scripts/inspect_observation.py` — observation sanity inspection.
+- `[ ]` **P4-M4-T3** `scripts/export_onnx.py` — ONNX export.
+- `[ ]` **P4-M4-T4** PyTorch-vs-ONNX numerical validation on test vectors.
+
+## Module 4.5 — Graduation Gate
+- `[ ]` **P4-M5-T1** Confirm acceptance: flat >95%, rough >90%, 5 cm step >90%, 10 cm step >80%, stair-up >80% · no joint-limit abuse · no unrealistic torque reliance · smooth actions · survives randomized latency/noise.
+
+### ✅ Phase 4 Definition of Done
+- `[ ]` PPO pipeline reproducible · height-map policy walks + handles rough terrain · single-step + stair-up curriculum shows measurable success · eval script produces success-rate reports · ONNX export numerically checked vs PyTorch.
+
+---
+
+# Phase 5 — Sim-to-Real Deployment  *(Risk: HIGH · Already trained)*
+> **Highest-risk phase.** Strict safety. `REAL_ROBOT_LOW_LEVEL_LEG_POLICY_APPROVED` must be explicitly set true only after the documented safety review (§14). Escalate through levels in order; pass the Go/No-Go gate before each step up.
+
+## Module 5.1 — Policy Runtime
+- `[ ]` **P5-M1-T1** `observation_builder.py` — build obs from real robot state, match training normalization exactly; missing values → safe stop.
+  - *AC:* obs dim = training config · ordering tested · norm stats from training artifact · missing sensor → stop.
+- `[ ]` **P5-M1-T2** `onnx_policy_runner.py` — load ONNX, fixed-rate inference, validate output dims, timing metrics.
+  - *AC:* inference < policy period · matches PyTorch within tolerance · bad output → safe stop.
+- `[ ]` **P5-M1-T3** `action_filter.py` — clamp joint targets, limit action rate + joint velocity, low-pass, joint safety envelope.
+  - *AC:* no output exceeds limits · no action spike passes · unit-testable with extreme inputs.
+- `[ ]` **P5-M1-T4** `policy_logger.py` — log full deployment record (§9.4).
+
+## Module 5.2 — Safety Supervisor
+- `[ ]` **P5-M2-T1** `policy_safety_supervisor.py` — cut output on: roll/pitch over threshold · joint/IMU missing · inference timeout · action NaN/Inf · joint target outside soft limit · operator stop · base instability. Switch to damping/zero.
+
+## Module 5.3 — Staged Hardware Bring-up
+- `[ ]` **P5-M3-T1** Level 0 — offline replay against recorded logs (no robot command topic).
+- `[ ]` **P5-M3-T2** Level 1 — hardware dry-run (powered, debug output only, no leg command).
+- `[ ]` **P5-M3-T3** Level 2 — suspended standing (gantry; balance/small offsets; operator e-stop ready).
+- `[ ]` **P5-M3-T4** Level 3 — suspended stepping in place (verify joint order, sign, delay).
+- `[ ]` **P5-M3-T5** Level 4 — foam obstacle 2→5→8 cm.
+- `[ ]` **P5-M3-T6** Level 5 — single wooden step 5→8→10–12 cm.
+- `[ ]` **P5-M3-T7** `tools/analyze_policy_log.py` + `compare_sim_real.py` — real-log analyzer.
+- `[ ]` **P5-M3-T8** Go/No-Go checklist gate (§9.5) before each escalation.
+- `[ ]` **P5-M3-T9** Level 6 — real stairs. **Only after documented safety review + all lower levels pass.**
+
+### ✅ Phase 5 Definition of Done
+- `[ ]` ONNX runtime works on target compute · observation builder matches training · safety supervisor stops unsafe output · suspended tests pass · low-obstacle tests pass · single-step tests pass · real stairs approved only after documented safety review.
+
+---
+
+# Phase 6 — CReF-Style Raw-Depth Perception Policy  *(Risk: HIGH · Training required)*
+> **Goal:** upgrade the height-map policy → raw-depth recurrent cross-modal fusion (CReF). **Start only after the Phase 4 height-map policy works.** Prefer distillation (Option A) first.
+
+## Module 6.1 — Data & Encoders
+- `[ ]` **P6-M1-T1** Raw-depth dataset collector from simulation.
+- `[ ]` **P6-M1-T2** Depth encoder (patch embedding / CNN → depth tokens).
+
+## Module 6.2 — Fusion Network
+- `[ ]` **P6-M2-T1** Cross-modal attention (proprio query attends to depth tokens).
+- `[ ]` **P6-M2-T2** GRU recurrent fusion + actor head.
+- `[ ]` **P6-M2-T3** Auxiliary heads: terrain type, height reconstruction, safe-foothold probability, depth validity mask.
+
+## Module 6.3 — Training
+- `[ ]` **P6-M3-T1** Depth augmentation (dropout, missing pixels, reflective/edge noise, motion blur, pitch/roll offset, latency, extrinsic error, FoV crop, near/far clipping).
+- `[ ]` **P6-M3-T2** Teacher-student distillation pipeline (teacher = height-map policy; loss = action + value imitation + aux terrain prediction).
+- `[ ]` **P6-M3-T3** Fine-tune with PPO after distillation.
+- `[ ]` **P6-M3-T4** Train raw-depth policy in simulation.
+
+## Module 6.4 — Evaluation & Deploy
+- `[ ]` **P6-M4-T1** Compare vs height-map policy (clutter / gaps / platforms).
+- `[ ]` **P6-M4-T2** Deploy through the **same Phase 5 safety protocol** (suspended → foam → low step → stairs).
+
+### ✅ Phase 6 Definition of Done
+- `[ ]` Raw-depth policy ≥ height-map policy in sim · survives depth noise/latency · generalizes better to clutter/gaps/platforms · suspended tests pass · low-obstacle + single-step tests pass · stairs follow the Phase 5 protocol.
+
+---
+
+## First Sprint (2 weeks)
+> From roadmap §13. Goal: **X2 perceives terrain and stops before unsafe terrain using existing SDK locomotion.** Track via the IDs above.
+
+- `[ ]` P0-M2-T2 — `configs/terrain_perception.yaml` + `configs/safe_locomotion.yaml`
+- `[ ]` P1-M1-T2 — `x2_terrain_msgs`
+- `[ ]` P1-M2-T3 — `heightmap_node.py`
+- `[ ]` P1-M3-T1 — `stair_detector.py`
+- `[ ]` P1-M4-T1 — `tools/record_terrain_bag.sh`
+- `[ ]` P1-M4-T2 — `tools/visualize_heightmap.py`
+- `[ ]` P2-M1-T2 — `velocity_adapter.py`
+- `[ ]` P2-M2-T2 — `safety_supervisor.py`
+
+**Sprint demo:** flat ground → live height map → place box/curb/stair → X2 classifies unsafe terrain → start slow forward → X2 slows + stops before obstacle → log shows the stop reason.
+
+---
+
+## Cross-cutting reminders (apply to every task)
+- **Safety first:** velocity/action clamps · state watchdog · IMU fall detector · timeout detector · operator e-stop · logging — on all real-robot motion (§1.1).
+- **Verify topics on the real robot** with `ros2 topic list` / `ros2 topic info -v` before trusting roadmap topic names.
+- **No real stair climbing** before the Phase 5 documented safety review.
+- **Prefer point cloud / compressed streams** over raw cross-unit camera subscriptions when bandwidth is high (§1.1).
+- **Start with height-map locomotion** before raw-depth CReF; PPO is the first RL algorithm (§1.3).

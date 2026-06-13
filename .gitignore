@@ -1,0 +1,59 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.python-version
+
+# ---- Pytest / coverage ----
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- ROS2 / colcon (built on the Linux box) ----
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
+# ---- Isaac Lab / training artifacts ----
+training/**/logs/
+training/**/runs/
+training/**/outputs/
+*.ckpt
+*.pt
+*.pth
+*.onnx
+wandb/
+
+# ---- Robot model assets (large binaries; provide out-of-band) ----
+training/isaac_lab/assets/meshes/
+*.usd
+*.usda
+*.usdc
+
+# ---- Recorded data (rosbags are large; keep out of git) ----
+*.bag
+*.db3
+*.mcap
+data/
+bags/
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- Claude Code local settings (machine-specific) ----
+.claude/settings.local.json
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
