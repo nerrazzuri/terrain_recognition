@@ -28,7 +28,7 @@ joints:
   right_hip_roll:   {min: -0.52, max: 0.52, vel_max: 8.0, effort_max: 100.0}
   right_hip_yaw:    {min: -0.52, max: 0.52, vel_max: 8.0, effort_max: 100.0}
   right_knee:       {min: 0.0,   max: 2.27, vel_max: 8.0, effort_max: 150.0}
-  right_ankle_pitch:{min: -0.87, max: 0.52, vel_max: 8.0, effort_max: 80.0}
+  right_ankle_pitch: {min: -0.87, max: 0.52, vel_max: 8.0, effort_max: 80.0}
   right_ankle_roll: {min: -0.44, max: 0.44, vel_max: 8.0, effort_max: 80.0}
 
 # Soft-limit margin (rad) kept inside the hard limits by the action filter.
