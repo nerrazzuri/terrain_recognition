@@ -34,13 +34,13 @@
 | Phase | Risk | Training | Modules | Tasks | Done | Status |
 |-------|------|----------|:---:|:---:|:---:|--------|
 | P0 — Foundation / Repo setup | — | No | 2 | 5 | 5 | ✅ Done |
-| P1 — Terrain Awareness | Low | No | 4 | 17 | 0 | Not started |
+| P1 — Terrain Awareness | Low | No | 4 | 17 | 15 | Code done (2 blocked on hardware bags) |
 | P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 0 | Not started |
 | P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 0 | Not started |
 | P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 0 | Not started |
 | P5 — Sim-to-Real Deployment | **High** | Trained | 3 | 14 | 0 | Not started |
 | P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 0 | Not started |
-| **Total** | | | **24** | **89** | **5** | |
+| **Total** | | | **24** | **89** | **20** | |
 
 **Current focus:** P1 — the First Sprint (perceive terrain & stop safely). P0 foundation is complete. See the [First Sprint](#first-sprint-2-weeks) section and roadmap §13.
 
@@ -66,37 +66,32 @@
 > **Target classes:** flat_ground · rough_ground · slope_up · slope_down · curb_or_single_step · stairs_up · stairs_down · gap_or_hole · platform · unknown_unsafe.
 
 ## Module 1.1 — Custom Messages & Workspace
-- `[ ]` **P1-M1-T1** Create the ROS2 workspace skeleton (`ros2_ws/src/...` packages with `package.xml` / `setup.py`).
-- `[ ]` **P1-M1-T2** Define `x2_terrain_msgs`: `TerrainCell.msg`, `TerrainGrid.msg`, `TerrainStatus.msg`, `StairEstimate.msg`, `SafetyDecision.msg`, `PolicyDebug.msg`, `srv/ResetTerrainMap.srv` (fields per roadmap §5.3).
-- `[ ]` **P1-M1-T3** Build `topic_discovery.py` + `tools/check_topics.sh` / `check_qos.sh`; verify real topics with `ros2 topic list` / `ros2 topic info -v`.
+- `[x]` **P1-M1-T1** Create the ROS2 workspace skeleton (`ros2_ws/src/...` packages with `package.xml` / `setup.py`). *4 packages: x2_common, x2_terrain_msgs, x2_terrain_perception, x2_safe_locomotion, x2_policy_runtime.*
+- `[x]` **P1-M1-T2** Define `x2_terrain_msgs`: `TerrainCell.msg`, `TerrainGrid.msg`, `TerrainStatus.msg`, `StairEstimate.msg`, `SafetyDecision.msg`, `PolicyDebug.msg`, `srv/ResetTerrainMap.srv` (fields per roadmap §5.3). *ament_cmake + rosidl.*
+- `[x]` **P1-M1-T3** Build `topic_discovery.py` + `tools/check_topics.sh` / `check_qos.sh`; verify real topics with `ros2 topic list` / `ros2 topic info -v`. *topic_discovery in x2_common (P0); tools added. Live verification still pending on robot.*
 
 ## Module 1.2 — Point Cloud → Height Map Pipeline
-- `[ ]` **P1-M2-T1** `pointcloud_projector.py` — subscribe RGB-D/LiDAR cloud, transform to base frame, drop NaNs, crop ROI (x 0–2 m, y ±0.8 m, z −0.5–1.0 m), voxel downsample.
-  - *AC:* ≥8 Hz from 10 Hz input · drops invalid points · publishes in/out point counts · survives 2 s of missing cloud.
-- `[ ]` **P1-M2-T2** `ground_plane_estimator.py` — RANSAC / robust least squares + IMU prior → plane normal, height offset, confidence.
-  - *AC:* flat ±2° · ramp directionally correct · confidence drops / multi-plane on stairs.
-- `[ ]` **P1-M2-T3** `heightmap_node.py` — robot-centered elevation map (2.0×1.6 m, 0.04 m res = 50×40 cells, 10 Hz, 0.5 s decay), per-cell confidence, debug viz.
-  - *AC:* stable when stationary · 10–15 cm step at correct height · unknown cells marked unknown (not flat) · unit tests for coord conversion + grid indexing.
-- `[ ]` **P1-M2-T4** `slope_detector.py` — slope angle + up/down direction from ground plane / height map.
+- `[x]` **P1-M2-T1** `pointcloud_projector.py` — subscribe RGB-D/LiDAR cloud, transform to base frame, drop NaNs, crop ROI (x 0–2 m, y ±0.8 m, z −0.5–1.0 m), voxel downsample. *Uses tested x2_common.transforms (drop_nonfinite, crop_roi); watchdog for missing cloud. AC needs live-rate check on robot.*
+- `[x]` **P1-M2-T2** `ground_plane_estimator.py` — RANSAC / robust least squares + IMU prior → plane normal, height offset, confidence. *core.ground_plane RANSAC+SVD; 9 unit tests (flat ±2°, ramp direction, outlier rejection, multi-plane confidence drop).*
+- `[x]` **P1-M2-T3** `heightmap_node.py` — robot-centered elevation map (2.0×1.6 m, 0.04 m res = 50×40 cells, 10 Hz, 0.5 s decay), per-cell confidence, debug viz. *core.heightmap; 10 unit tests incl. coord conversion, indexing, step height, unknown-not-flat.*
+- `[x]` **P1-M2-T4** `slope_detector.py` — slope angle + up/down direction from ground plane / height map. *core.slope; covered by ground-plane/slope tests.*
 
 ## Module 1.3 — Terrain Feature Detectors
-- `[ ]` **P1-M3-T1** `stair_detector.py` — detect repeated horizontal planes + vertical risers; estimate rise/tread, first-step distance, recommended stop distance, confidence.
-  - *AC:* detects clear stairs stationary · rejects clutter lacking repeated structure · first-step distance within safe-stop tolerance · never `safe_to_continue=true` under uncertainty.
-- `[ ]` **P1-M3-T2** `gap_detector.py` — detect holes/drop-offs from missing/lower cells; estimate width + distance.
-  - *AC:* detects open gap · treats unknown region as unsafe unless high confidence · publishes reason string.
-- `[ ]` **P1-M3-T3** `traversability_estimator.py` — per-cell traversability feeding the height map `traversability[]` field.
-- `[ ]` **P1-M3-T4** `terrain_classifier.py` — fuse ground/heightmap/stair/slope/gap → final terrain type + confidence + reason (decision policy §5.4).
+- `[x]` **P1-M3-T1** `stair_detector.py` — detect repeated horizontal planes + vertical risers; estimate rise/tread, first-step distance, recommended stop distance, confidence. *core.stairs; 7 unit tests (clutter rejected, single step ≠ stairs, never confident under ambiguity).*
+- `[x]` **P1-M3-T2** `gap_detector.py` — detect holes/drop-offs from missing/lower cells; estimate width + distance. *core.gaps; 5 unit tests; unknown-region-unsafe + reason string.*
+- `[x]` **P1-M3-T3** `traversability_estimator.py` — per-cell traversability feeding the height map `traversability[]` field. *core.traversability; 4 unit tests; filled by heightmap_node.*
+- `[x]` **P1-M3-T4** `terrain_classifier.py` — fuse ground/heightmap/stair/slope/gap → final terrain type + confidence + reason (decision policy §5.4). *core.classifier; 9 unit tests incl. precedence + safe_to_continue invariants.*
 
 ## Module 1.4 — Tooling, Data & Tests
-- `[ ]` **P1-M4-T1** `tools/record_terrain_bag.sh` — record depth image, depth cloud, LiDAR cloud, IMU, TF, joint state.
-- `[ ]` **P1-M4-T2** `tools/visualize_heightmap.py` + `visualization_node.py` — live height-map view.
-- `[ ]` **P1-M4-T3** `offline_bag_analyzer.py` + `tools/replay_bag_heightmap.py` — replay bags through the pipeline offline.
-- `[ ]` **P1-M4-T4** Unit tests: grid coordinate conversion, grid indexing, terrain-classification decision logic.
-- `[ ]` **P1-M4-T5** Record real terrain bags: flat, carpet, reflective, curb 5/10/15 cm, stairs up, stairs down, platform edge, gap mockup, cluttered unsafe.
-- `[ ]` **P1-M4-T6** Validate detection on each offline bag scene.
+- `[x]` **P1-M4-T1** `tools/record_terrain_bag.sh` — record depth image, depth cloud, LiDAR cloud, IMU, TF, joint state.
+- `[x]` **P1-M4-T2** `tools/visualize_heightmap.py` + `visualization_node.py` — live height-map view. *viz node → OccupancyGrid; tool has `--demo` (no-ROS) mode.*
+- `[x]` **P1-M4-T3** `offline_bag_analyzer.py` + `tools/replay_bag_heightmap.py` — replay bags through the pipeline offline.
+- `[x]` **P1-M4-T4** Unit tests: grid coordinate conversion, grid indexing, terrain-classification decision logic. *78 unit tests total, all TDD.*
+- `[!]` **P1-M4-T5** Record real terrain bags: flat, carpet, reflective, curb 5/10/15 cm, stairs up, stairs down, platform edge, gap mockup, cluttered unsafe. **BLOCKED: requires physical robot + sensors.** Recording script (P1-M4-T1) is ready.
+- `[!]` **P1-M4-T6** Validate detection on each offline bag scene. **BLOCKED on P1-M4-T5** (needs the real bags). Offline analyzer is ready to run them.
 
 ### ✅ Phase 1 Definition of Done
-- `[ ]` Perception runs at 8–10 Hz · height map visualized live · flat/slope/curb/stairs/gap detected in offline bags · `unknown_unsafe` used correctly · **no locomotion commands sent** · logs saved per test.
+- `[~]` Perception runs at 8–10 Hz · height map visualized live · flat/slope/curb/stairs/gap detected in offline bags · `unknown_unsafe` used correctly · **no locomotion commands sent** · logs saved per test. *Code + algorithms complete and unit-tested; **live-rate / offline-bag verification blocked on hardware bags + a ROS2 build environment.***
 
 ---
 
@@ -260,11 +255,11 @@
 > From roadmap §13. Goal: **X2 perceives terrain and stops before unsafe terrain using existing SDK locomotion.** Track via the IDs above.
 
 - `[x]` P0-M2-T2 — `configs/terrain_perception.yaml` + `configs/safe_locomotion.yaml`
-- `[ ]` P1-M1-T2 — `x2_terrain_msgs`
-- `[ ]` P1-M2-T3 — `heightmap_node.py`
-- `[ ]` P1-M3-T1 — `stair_detector.py`
-- `[ ]` P1-M4-T1 — `tools/record_terrain_bag.sh`
-- `[ ]` P1-M4-T2 — `tools/visualize_heightmap.py`
+- `[x]` P1-M1-T2 — `x2_terrain_msgs`
+- `[x]` P1-M2-T3 — `heightmap_node.py`
+- `[x]` P1-M3-T1 — `stair_detector.py`
+- `[x]` P1-M4-T1 — `tools/record_terrain_bag.sh`
+- `[x]` P1-M4-T2 — `tools/visualize_heightmap.py`
 - `[ ]` P2-M1-T2 — `velocity_adapter.py`
 - `[ ]` P2-M2-T2 — `safety_supervisor.py`
 
