@@ -25,14 +25,42 @@ def test_mjcf_file_present():
     assert _MJCF.is_file()
 
 
-@mujoco_only
-def test_mjcf_loads_and_has_leg_joints():
+def _require_model():
     if not _MESHES.is_dir() or not any(_MESHES.glob("*.STL")):
         pytest.skip("meshes not present (gitignored); run tools/fetch_x2_assets.sh")
     import mujoco
+    return mujoco, mujoco.MjModel.from_xml_path(str(_MJCF))
 
-    model = mujoco.MjModel.from_xml_path(str(_MJCF))
+
+@mujoco_only
+def test_mjcf_loads_and_has_leg_joints():
+    mujoco, model = _require_model()
     joint_names = {mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
                    for i in range(model.njnt)}
     for leg_joint in aimdk_leg_order():
         assert leg_joint in joint_names, f"missing {leg_joint} in MJCF"
+
+
+@mujoco_only
+def test_mjcf_has_floating_base_and_expected_dof():
+    mujoco, model = _require_model()
+    # 31 actuated joints (12 leg + 3 waist + 12 arm + 2 head) + 1 floating base
+    assert model.njnt == 32
+    assert model.jnt_type[0] == mujoco.mjtJoint.mjJNT_FREE
+    assert model.nu == 31
+    assert 20.0 < model.body_subtreemass[0] < 80.0   # plausible humanoid mass (~43 kg)
+
+
+@mujoco_only
+def test_model_steps_without_exploding():
+    """Spawn-and-step AC (roadmap §7.3): from the default pose under gravity the model must
+    stay finite and not blow up."""
+    import numpy as np
+    mujoco, model = _require_model()
+    data = mujoco.MjData(model)
+    mujoco.mj_resetData(model, data)
+    for _ in range(300):
+        mujoco.mj_step(model, data)
+    assert np.all(np.isfinite(data.qpos)), "qpos went non-finite (model exploded)"
+    assert np.all(np.isfinite(data.qvel))
+    assert np.max(np.abs(data.qvel)) < 50.0, "implausible velocities (instability)"

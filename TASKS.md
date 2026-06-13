@@ -36,7 +36,7 @@
 | P0 — Foundation / Repo setup | — | No | 2 | 5 | 5 | ✅ Done |
 | P1 — Terrain Awareness | Low | No | 4 | 17 | 15 | Code done (2 blocked on hardware bags) |
 | P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 9 | Code done; AimDK API wired (on-robot tests blocked) |
-| P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 6 | Assets+limits in; sim spawn blocked (Isaac Lab/MuJoCo) |
+| P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 6 | Model validated in MuJoCo; Isaac Lab path pending |
 | P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 6 | Logic done; training blocked (Isaac Lab/GPU/torch) |
 | P5 — Sim-to-Real Deployment | **High** | Trained | 3 | 14 | 6 | Runtime logic done; hardware gated/blocked |
 | P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 1 | Architecture scaffolded; training blocked |
@@ -137,16 +137,16 @@
 - `[x]` **P3-M2-T2** `tools/check_joint_order.py` — joint-order verification tool. *Runs; prints side-by-side table; warns on unverified limits.*
 - `[x]` **P3-M2-T3** Joint limit config `joint_limits_x2_ultra.yaml`. *Real values from X2_URDF-v1.3.0 (`verified: true`); 12 leg + 3 waist joints with position/velocity/effort limits.*
 - `[~]` **P3-M2-T4** `x2_actuator_cfg.py` — actuator / PD parameters. *Builds ImplicitActuatorCfg from config; **blocked on Isaac Lab**; PD gains are first estimates needing sim validation.*
-- `[~]` **P3-M2-T5** `x2_robot_cfg.py` — asset path, default pose, base height, limits, PD gains, contact/termination bodies, feet names. *Scaffold complete; **blocked on Isaac Lab + X2 USD asset**; AC (spawn/stand) pending the asset.*
+- `[~]` **P3-M2-T5** `x2_robot_cfg.py` — asset path, default pose, base height, limits, PD gains, contact/termination bodies, feet names. *Isaac Lab cfg scaffold complete (spawns via URDF importer / USD). **Model itself validated in MuJoCo**: loads (nq=38, 31 actuators, 43.5 kg, floating base), steps 300 frames under gravity without exploding (no NaN, stable). Isaac Lab spawn-and-stand still pending Isaac Lab install.*
 
 ## Module 3.3 — Environments & Terrain
 - `[~]` **P3-M3-T1** `x2_standing_env_cfg.py` — flat ground, standing target, low disturbance, terminate on fall. *Scaffold (timing from config); **blocked on Isaac Lab + asset**.*
 - `[~]` **P3-M3-T2** `terrain_generator.py` — progressive levels 0–6 (flat → rough → slope → single step → stairs up → stairs down → mixed) with params from §7.4. *Specs in `terrain_spec.py` done + unit-tested (5 tests); Isaac Lab adapter scaffolded (**blocked on Isaac Lab**).*
 - `[x]` **P3-M3-T3** Height-sample extraction around the robot in sim. *`height_samples.py` pure logic, 3 unit tests (shape, base-relative, yaw rotation); 121-dim matches training obs.*
-- `[x]` **P3-M3-T4** Simulation smoke tests (`tests/simulation/`), runnable locally / in CI. *3 pass without GPU; Isaac-dependent cases skip when isaaclab absent.*
+- `[x]` **P3-M3-T4** Simulation smoke tests (`tests/simulation/`), runnable locally / in CI. *Runs without GPU; **MuJoCo tests load the real X2 model, verify 12 leg joints + floating base + DoF, and step physics without exploding**; Isaac-dependent cases skip when isaaclab absent. Plus `training/mujoco/scripts/validate_model.py`.*
 
 ### ✅ Phase 3 Definition of Done
-- `[~]` X2 spawns and stands in sim · joint ordering verified vs AimDK · terrain generator exists · height samples extractable · basic sim tests run. *Joint map / terrain specs / height samples / smoke tests done & tested; **spawn-and-stand blocked on Isaac Lab install + X2 USD asset (P3-M1)**.*
+- `[~]` X2 spawns and stands in sim · joint ordering verified vs AimDK · terrain generator exists · height samples extractable · basic sim tests run. *Joint map / terrain specs / height samples / smoke tests done & tested; **X2 model spawns + steps without exploding in MuJoCo** (secondary sim, validated). Active standing (needs a controller) + the Isaac Lab path still pending Isaac Lab install.*
 
 ---
 
