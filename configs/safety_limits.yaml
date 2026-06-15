@@ -8,7 +8,7 @@ REAL_ROBOT_LOW_LEVEL_LEG_POLICY_APPROVED: false
 watchdog_timeouts_s:
   terrain_status: 0.5
   imu: 0.2
-  command: 0.3
+  command: 0.2                  # robot MC CommandGuard expiration_time = 200 ms (verified)
   policy_inference: 0.05        # 50 Hz policy -> inference must be < 20 ms; cut if slow
 
 orientation_limits_deg:

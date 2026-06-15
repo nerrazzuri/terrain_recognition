@@ -133,7 +133,7 @@
 - `[~]` **P3-M1-T2** Convert model to an Isaac Lab asset (`x2.usd`); place under `training/isaac_lab/assets/`. *URDF placed; `x2_robot_cfg` spawns via Isaac Lab's URDF importer or a converted USD (`X2_USD_PATH`); `assets_available()` now true. **USD conversion command documented (assets/SOURCES.md); running it needs Isaac Lab.***
 
 ## Module 3.2 — Config & Validation
-- `[x]` **P3-M2-T1** `x2_joint_map.py` — map sim joints ↔ AimDK order (legs: L then R; hip_pitch/roll/yaw, knee, ankle_pitch/roll). *Pure logic, 5 unit tests (round-trip, reorder, missing-joint, L/R balance); limits from config.*
+- `[x]` **P3-M2-T1** `x2_joint_map.py` — map sim joints ↔ AimDK order (legs: L then R; hip_pitch/roll/yaw, knee, ankle_pitch/roll). *Pure logic, 6 unit tests; **leg order VERIFIED against the robot MC `robot_model.yaml`** — full 31-DoF body order in `AIMDK_BODY_ORDER` (legs 0-11 → waist → head → arms); limits from URDF v1.3.0.*
 - `[x]` **P3-M2-T2** `tools/check_joint_order.py` — joint-order verification tool. *Runs; prints side-by-side table; warns on unverified limits.*
 - `[x]` **P3-M2-T3** Joint limit config `joint_limits_x2_ultra.yaml`. *Real values from X2_URDF-v1.3.0 (`verified: true`); 12 leg + 3 waist joints with position/velocity/effort limits.*
 - `[~]` **P3-M2-T4** `x2_actuator_cfg.py` — actuator / PD parameters. *Builds ImplicitActuatorCfg from config; **blocked on Isaac Lab**; PD gains are first estimates needing sim validation.*

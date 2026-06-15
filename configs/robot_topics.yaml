@@ -66,6 +66,7 @@ locomotion:
     type: aimdk_msgs/msg/McLocomotionVelocity   # fields: forward_velocity, lateral_velocity, angular_velocity
     verified: true
     command_source: x2_terrain_safe_locomotion
+    rate_hz: 50                                  # locomotion velocity runs at ~50 Hz (MC)
   # Input-source registration / query services (aimdk_msgs).
   set_input_source_service:
     name: /aimdk_msgs/srv/SetMcInputSource
@@ -74,6 +75,13 @@ locomotion:
   get_input_source_service:
     name: /aimdk_msgs/srv/GetCurrentInputSource
     type: aimdk_msgs/srv/GetCurrentInputSource
+  # Speed-mode services (MC): set/get low(1)/medium(2)/high(3). low_speed fwd bound = 0.8 m/s.
+  set_speed_mode_service: {name: mc_set_locomotion_speed_mode_service}
+  get_speed_mode_service: {name: mc_get_locomotion_speed_mode_service}
+
+# Verified vs robot MC (lx2501_3_t2d5): input-source priorities rc=80 > vr=70 > app_proxy=60
+# > interaction=50 > pnc=40; CommandGuard expiration_time = 200 ms. The leg joint command
+# runs at 500 Hz. The physical remote controller (rc) always overrides lower-priority sources.
 
 # Leg joint command — FORBIDDEN while REAL_ROBOT_LOW_LEVEL_LEG_POLICY_APPROVED is false.
 forbidden_while_unapproved:

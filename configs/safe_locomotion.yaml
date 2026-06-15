@@ -7,8 +7,14 @@ command_source:
   # AimDK SetMcInputSource registration (SDK lx2501_3 v0.9.0.4).
   service: /aimdk_msgs/srv/SetMcInputSource
   register_action_value: 1001
-  priority: 40                          # example default; tune vs other sources
+  priority: 40                          # pnc-level (lowest). Verified vs robot MC InputManager:
+                                        # rc=80 > vr=70 > app_proxy=60 > interaction=50 > pnc=40.
+                                        # The physical remote controller (rc) always overrides us.
   timeout_ms: 1000
+  # Optional: set a conservative speed mode before moving (robot supports low/medium/high).
+  # low_speed forward bound is 0.8 m/s; our caps (<=0.12) sit well inside it.
+  set_speed_mode_service: /aima/mc/locomotion/set_speed_mode   # mc_set_locomotion_speed_mode_service
+  speed_mode: 1                         # 1 = low_speed
 
 # Max forward velocity allowed per terrain type (m/s). Anything not listed -> stop (0.0).
 velocity_by_terrain:
@@ -36,7 +42,7 @@ command_smoother:
 safety_supervisor:
   terrain_status_timeout_s: 0.5
   imu_timeout_s: 0.2
-  command_timeout_s: 0.3
+  command_timeout_s: 0.2   # matches the robot MC CommandGuard expiration_time (200 ms)
   max_roll_deg: 15.0
   max_pitch_deg: 15.0
   stop_on_unknown_ahead: true

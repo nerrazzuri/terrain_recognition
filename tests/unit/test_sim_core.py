@@ -52,6 +52,12 @@ def test_left_right_counts_balanced():
     assert sum(n.startswith("right_") for n in order) == 6
 
 
+def test_leg_order_is_prefix_of_verified_body_order():
+    # legs must be the first 12 of the full AimDK body order (robot MC robot_model.yaml)
+    assert jm.aimdk_leg_order() == jm.AIMDK_BODY_ORDER[:12]
+    assert len(jm.AIMDK_BODY_ORDER) == 31   # 12 leg + 3 waist + 2 head + 14 arm (x2_31dof)
+
+
 # --- height samples (P3-M3-T3) ---
 
 def test_height_grid_shape():
