@@ -31,10 +31,15 @@ TERMINATION_BODY_NAMES = ["torso_link", "head_pitch_link", "head_yaw_link",
 
 
 def _spawn_cfg():
-    """Spawn from USD if a converted asset exists, else from the URDF importer."""
+    """Spawn from USD if a converted asset exists, else from the URDF importer.
+
+    ``activate_contact_sensors=True`` enables the per-body contact-reporter API the
+    ContactSensor (used for fall/illegal-contact termination) requires.
+    """
     if Path(X2_USD_PATH).is_file():
-        return sim_utils.UsdFileCfg(usd_path=X2_USD_PATH)
-    return sim_utils.UrdfFileCfg(asset_path=X2_URDF_PATH, fix_base=False)
+        return sim_utils.UsdFileCfg(usd_path=X2_USD_PATH, activate_contact_sensors=True)
+    return sim_utils.UrdfFileCfg(
+        asset_path=X2_URDF_PATH, fix_base=False, activate_contact_sensors=True)
 
 
 def build_robot_cfg() -> ArticulationCfg:
