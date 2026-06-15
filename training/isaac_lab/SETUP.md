@@ -1,11 +1,59 @@
 # Isaac Lab Setup — X2 Terrain Locomotion (NVIDIA Brev / A6000)
 
 Repo-specific runbook to get from a fresh GPU instance to "X2 spawns and stands in Isaac Sim"
-and the first RL training run. Target: **NVIDIA Brev Launchable, 1× RTX A6000 (48 GB)**,
-Ubuntu 22.04. The A6000 (Ampere) is well-supported by Isaac Sim — no Blackwell driver caveats.
+and the first RL training run. Target: **NVIDIA Brev Launchable, 1× RTX A6000 (48 GB)**.
 
 > Phase gate: this is Phase 3/4 (sim only, no hardware, no real leg policy). The approval flag
 > stays false. Nothing here touches the robot.
+
+---
+
+## Path A — official `isaac-sim/isaac-launchable` (recommended; what we're using)
+
+A containerized Brev Launchable with **Isaac Lab 2.3 + Isaac Sim 5.1 preinstalled**, browser
+VSCode, and Kit App Streaming for the UI. Deploy from <https://github.com/isaac-sim/isaac-launchable>.
+
+**Before deploying:**
+- Choose an **AWS-backed A6000** instance — the launchable is **NOT compatible with Crusoe**
+  (per its README); AWS is the tested provider. A6000 has RT cores (needed for streaming).
+- Generous disk (≥ 100 GB).
+
+**Do NOT run `brev_bootstrap.sh` here** — Isaac Lab/Sim are already installed in the
+container. That script is only for Path B (a bare VM). In this container you run scripts with
+plain **`python <script>.py`** (the container Python has Isaac Sim/Lab); add **`--livestream 2`**
+only when you want the streamed UI (open a second browser tab at `<vscode-url>/viewer`).
+
+**Inside the browser VSCode terminal:**
+```bash
+git clone https://github.com/nerrazzuri/terrain_recognition.git && cd terrain_recognition
+# upload X2_URDF-v1.3.0.zip via the VSCode file explorer, then repopulate the meshes:
+tools/fetch_x2_assets.sh ~/X2_URDF-v1.3.0.zip          # expect 45 STLs
+
+export PYTHONPATH=$PWD/training/isaac_lab:$PWD/ros2_ws/src/x2_common:$PYTHONPATH
+export X2_CONFIG_DIR=$PWD/configs
+
+# (optional) convert URDF -> USD; path/args may differ slightly in Isaac Lab 2.3:
+python /isaac-lab/IsaacLab/scripts/tools/convert_urdf.py \
+    training/isaac_lab/assets/x2_ultra_simple_collision.urdf \
+    training/isaac_lab/assets/x2.usd --merge-joints --headless || true
+export X2_USD_PATH=$PWD/training/isaac_lab/assets/x2.usd     # falls back to URDF importer if absent
+
+# validate the asset: X2 spawns and stands under PD
+python training/isaac_lab/scripts/spawn_x2.py --headless --seconds 5   # expect: STANDS
+# add --livestream 2 (drop --headless) to watch it in the /viewer tab
+```
+
+> Versions: this launchable is Isaac Lab **2.3** / Isaac Sim **5.1**, newer than the pinned
+> versions in Path B. Our code uses the `isaaclab.*` namespace (correct for 2.x), so it should
+> import; if `spawn_x2.py` errors on an API change, note the message — minor cfg adjustments may
+> be needed for 2.3/5.1. The manager-based RL env (Phase 4) is wired against this version next.
+
+---
+
+## Path B — manual install on a bare VM (no preinstalled Isaac Lab)
+
+Use this only if you are NOT on the containerized launchable above. The A6000 (Ampere) is
+well-supported by Isaac Sim — no Blackwell driver caveats.
 
 ---
 
