@@ -21,6 +21,16 @@ args = parser.parse_args()
 app_launcher = AppLauncher(args)
 simulation_app = app_launcher.app
 
+import os  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+# Self-bootstrap import paths + config dir (env vars do not survive a Brev stop/restart).
+_REPO = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(_REPO / "training/isaac_lab"))
+sys.path.insert(0, str(_REPO / "ros2_ws/src/x2_common"))
+os.environ.setdefault("X2_CONFIG_DIR", str(_REPO / "configs"))
+
 import torch  # noqa: E402
 from rsl_rl.runners import OnPolicyRunner  # noqa: E402
 from isaaclab.envs import ManagerBasedRLEnv  # noqa: E402
