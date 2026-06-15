@@ -20,6 +20,8 @@ parser = argparse.ArgumentParser(description="Spawn + stand the X2 in Isaac Sim.
 parser.add_argument("--seconds", type=float, default=5.0)
 parser.add_argument("--spawn-z", type=float, default=0.0, help="override spawn height (0 = cfg default)")
 parser.add_argument("--fix-base", action="store_true", help="debug: pin the base (isolate joints/asset)")
+parser.add_argument("--keep-open", action="store_true",
+                    help="after the measured run, keep holding the pose until the app/viewer is closed (for --livestream)")
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 app_launcher = AppLauncher(args)
@@ -87,6 +89,19 @@ def main():
     stood = bool(base_z_last > 0.45 and upright > 0.85)
     print(f"[spawn_x2] RESULT base_z={base_z_last:.3f} upright={upright:.2f} "
           f"-> {'STANDS' if stood else 'did NOT stand'}")
+
+    if args.keep_open:
+        print("[spawn_x2] --keep-open: holding pose. Open the /viewer tab to watch; "
+              "Ctrl+C in this terminal to stop.")
+        try:
+            while simulation_app.is_running():
+                robot.set_joint_position_target(default_q)
+                robot.write_data_to_sim()
+                sim.step()
+                robot.update(dt)
+        except KeyboardInterrupt:
+            pass
+
     simulation_app.close()
     return 0 if stood else 1
 
