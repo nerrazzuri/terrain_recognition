@@ -135,12 +135,9 @@ class RewardsCfg:
     hip_deviation = RewTerm(func=mdp.joint_deviation_l1, weight=-0.5,
                             params={"asset_cfg": SceneEntityCfg(
                                 "robot", joint_names=[".*_hip_yaw_joint", ".*_hip_roll_joint"])})
-    # encourage stepping when commanded to move (gated to ~0 at zero command)
-    feet_air_time = RewTerm(func=mdp.feet_air_time, weight=0.25,
-                            params={"command_name": "base_velocity",
-                                    "sensor_cfg": SceneEntityCfg(
-                                        "contact_forces", body_names=".*ankle_roll.*"),
-                                    "threshold": 0.4})
+    # NOTE: a feet_air_time stepping reward (encourages clean steps) lives in the locomotion
+    # task mdp (isaaclab_tasks...velocity.mdp), not core isaaclab.envs.mdp — add it once base
+    # walking works. Velocity tracking already drives forward motion.
     # --- effort / smoothness ---
     dof_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2.0e-5)
     dof_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
