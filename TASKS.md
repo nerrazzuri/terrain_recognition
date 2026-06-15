@@ -167,7 +167,7 @@
 - `[x]` **P4-M2-T4** `domain_randomization.py` — mass/inertia/CoM, motor strength, PD, action delay, sensor latency, IMU noise, depth/heightmap noise, friction, encoder noise (§8.10). *Seedable; 2 unit tests (within-range, reproducible).*
 
 ## Module 4.3 — Curriculum Tasks
-- `[~]` **P4-M3-T1** Stage A — standing (`x2_standing_env_cfg.py`): stand 30 s, recover small pushes. *Full manager-based env runs + trains on Isaac Lab 2.3 (L40S); reward = alive + target-height + upright, penalise motion/effort, terminate on tilt/contact; push DR included. **Convergence run pending** (10-iter smoke ran; needs ~1500 iters). MuJoCo PD stand already validated the pose/gains.*
+- `[~]` **P4-M3-T1** Stage A — standing (`x2_standing_env_cfg.py`): stand 30 s, recover small pushes. ***Trained & converged** (1500 iters, L40S, ~40k steps/s): X2 stays upright the full 20 s episode in ~93% of cases (`bad_orientation` 1.0→0.05), survives periodic pushes, mean reward +3. **Caveat:** drifts/yaws while upright (no planar-velocity penalty yet) — adding velocity-command tracking next for a planted stand + Stage-B walking.*
 - `[~]` **P4-M3-T2** Stage B — flat walking (`x2_flat_walk_env_cfg.py`): fwd 0–0.3 m/s, yaw ±0.3 rad/s. *Scaffolded; blocked.*
 - `[~]` **P4-M3-T3** Stage C — rough terrain (`x2_rough_env_cfg.py`): 1–5 cm noise, mild slopes. *Scaffolded; blocked.*
 - `[~]` **P4-M3-T4** Stage D — single step / curb: 2→5→8→12→15 cm. *In `x2_stairs_env_cfg` + terrain_spec level 3; blocked.*
