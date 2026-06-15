@@ -48,11 +48,19 @@ class TerrainClassifier(Node):
         cfg, h2d, c2d, xpos = grid_msg.grid_from_flat(
             msg.width, msg.height, msg.resolution_m, msg.origin_x_m, msg.origin_y_m,
             msg.height_m, msg.confidence)
-        px, pz = forward_height_profile(h2d, xpos)
-        # central-band confidence profile, aligned with pz's valid columns
-        cprof = np.nanmean(c2d[c2d.shape[0] // 2 - 3: c2d.shape[0] // 2 + 3, :], axis=0)
-        valid = ~np.isnan(np.nanmean(np.where(c2d > 0, h2d, np.nan), axis=0))
-        cprof = cprof[valid] if cprof.shape[0] == valid.shape[0] else cprof[: px.shape[0]]
+        # Forward profile over the central y band, keeping only OBSERVED columns; align the
+        # confidence profile to the SAME columns so partial sensor coverage (a forward-facing
+        # RGB-D sees only part of the ROI) does not drag overall confidence toward zero.
+        c = h2d.shape[0] // 2
+        band_h = h2d[max(0, c - 3): c + 3, :]
+        band_c = c2d[max(0, c - 3): c + 3, :]
+        with np.errstate(invalid="ignore"):
+            all_nan = np.all(np.isnan(band_h), axis=0)
+            prof = np.full(band_h.shape[1], np.nan)
+            prof[~all_nan] = np.nanmean(band_h[:, ~all_nan], axis=0)
+        valid = ~np.isnan(prof)
+        px, pz = xpos[valid], prof[valid]
+        cprof = band_c.mean(axis=0)[valid]
 
         gap_res = gaps.detect_gap(px, pz, cprof, self._gap_params)
 

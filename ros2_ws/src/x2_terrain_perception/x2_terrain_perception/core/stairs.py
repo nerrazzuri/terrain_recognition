@@ -151,7 +151,11 @@ def forward_height_profile(height_grid_2d: np.ndarray, x_positions: np.ndarray,
     c = n_y // 2
     half = max(1, y_center_band // 2)
     band = grid[max(0, c - half): min(n_y, c + half), :]
+    # Columns that are entirely unknown (all NaN) are expected; suppress the all-NaN-slice
+    # warning and drop them via the validity mask below.
     with np.errstate(invalid="ignore"):
-        prof = np.nanmean(band, axis=0)
+        all_nan = np.all(np.isnan(band), axis=0)
+        prof = np.full(band.shape[1], np.nan)
+        prof[~all_nan] = np.nanmean(band[:, ~all_nan], axis=0)
     valid = ~np.isnan(prof)
     return np.asarray(x_positions)[valid], prof[valid]

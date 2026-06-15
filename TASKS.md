@@ -91,7 +91,7 @@
 - `[!]` **P1-M4-T6** Validate detection on each offline bag scene. **BLOCKED on P1-M4-T5** (needs the real bags). Offline analyzer is ready to run them.
 
 ### ✅ Phase 1 Definition of Done
-- `[~]` Perception runs at 8–10 Hz · height map visualized live · flat/slope/curb/stairs/gap detected in offline bags · `unknown_unsafe` used correctly · **no locomotion commands sent** · logs saved per test. *Code + algorithms complete and unit-tested; **pipeline runs as a live ROS2 graph — flat vs stairs distinguished end-to-end (synthetic cloud, integration test)**. Live-rate measurement + real-bag detection still pending hardware bags.*
+- `[~]` Perception runs at 8–10 Hz · height map visualized live · flat/slope/curb/stairs/gap detected in offline bags · `unknown_unsafe` used correctly · **no locomotion commands sent** · logs saved per test. *Code + algorithms complete and unit-tested; **detection validated on MuJoCo-rendered depth** (flat/curb/stairs/platform correctly classified; stair rise/tread accurate) and as a live ROS2 graph. Live-rate measurement + real-bag detection still pending hardware bags. (Fixed a confidence-aggregation bug surfaced by realistic partial-coverage sensing.)*
 
 ---
 
@@ -121,7 +121,7 @@
 - `[x]` **P2-M3-T6** Demo script: walk forward → slow → stop before stairs, with logged stop reason. *`launch/safe_stop_demo.launch.py` (dry-run) + **automated integration test** (`tests/integration/test_perceive_and_stop.py`): live ROS2 graph proves flat→go, stairs→stop with the terrain-driven stop reason.*
 
 ### ✅ Phase 2 Definition of Done
-- `[~]` Source registration works · safe adapter commands slow walking · X2 stops before stairs/gaps/unknown · watchdog stop works · manual stop works · logs prove the stop came from terrain perception. *Pipeline **validated end-to-end as a live ROS2 graph in dry-run** (synthetic input): flat ground → commands forward; stairs ahead → classified unsafe → supervisor stop → velocity zeroed. **On-robot walking/stop + AimDK source registration still blocked on hardware + SDK.***
+- `[~]` Source registration works · safe adapter commands slow walking · X2 stops before stairs/gaps/unknown · watchdog stop works · manual stop works · logs prove the stop came from terrain perception. *Pipeline **validated two ways**: (1) live ROS2 graph in dry-run (synthetic input); (2) **sim-in-the-loop on MuJoCo-rendered depth** (`training/mujoco/scripts/perceive_demo.py`) — flat→walk 0.10 m/s; curb/stairs/platform→stop; approach sweep flips go→stop as stairs enter the ~2 m range; stair rise/tread recovered to ~1 cm. **On-robot walking/stop + AimDK source registration still blocked on hardware + SDK.***
 
 ---
 
