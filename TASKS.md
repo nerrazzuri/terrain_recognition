@@ -2,7 +2,7 @@
 
 **Plan source of truth:** [x2_terrain_stair_climbing_roadmap.md](x2_terrain_stair_climbing_roadmap.md)
 **This file:** living checklist of every module and task. Update each task's status box as work progresses.
-**Last updated:** 2026-06-14 — All phases scaffolded P0-P6; 173 tests passing. Integrated X2_URDF-v1.3.0 (assets, joint limits) + SDK lx2501_3-v0.9.0.4 (topics, AimDK velocity/registration API). Software-complete items [x]; sim/hardware/training-dependent items [~]/[!] with blockers.
+**Last updated:** 2026-06-15 — Workspace builds on ROS2 Humble; perceive-and-stop pipeline validated end-to-end as a live ROS2 graph (flat→go, stairs→stop, dry-run). X2 stands in MuJoCo. Integrated X2_URDF-v1.3.0 + verified vs robot MC (lx2501_3). 186 tests pass (incl. integration). Sim/hardware/training items [~]/[!] with blockers.
 
 ---
 
@@ -35,7 +35,7 @@
 |-------|------|----------|:---:|:---:|:---:|--------|
 | P0 — Foundation / Repo setup | — | No | 2 | 5 | 5 | ✅ Done |
 | P1 — Terrain Awareness | Low | No | 4 | 17 | 15 | Code done (2 blocked on hardware bags) |
-| P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 9 | Code done; AimDK API wired (on-robot tests blocked) |
+| P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 9 | Pipeline validated live (dry-run); on-robot blocked |
 | P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 6 | Model validated in MuJoCo; Isaac Lab path pending |
 | P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 6 | Logic done; training blocked (Isaac Lab/GPU/torch) |
 | P5 — Sim-to-Real Deployment | **High** | Trained | 3 | 14 | 6 | Runtime logic done; hardware gated/blocked |
@@ -66,7 +66,7 @@
 > **Target classes:** flat_ground · rough_ground · slope_up · slope_down · curb_or_single_step · stairs_up · stairs_down · gap_or_hole · platform · unknown_unsafe.
 
 ## Module 1.1 — Custom Messages & Workspace
-- `[x]` **P1-M1-T1** Create the ROS2 workspace skeleton (`ros2_ws/src/...` packages with `package.xml` / `setup.py`). *4 packages: x2_common, x2_terrain_msgs, x2_terrain_perception, x2_safe_locomotion, x2_policy_runtime.*
+- `[x]` **P1-M1-T1** Create the ROS2 workspace skeleton (`ros2_ws/src/...` packages with `package.xml` / `setup.py`). *5 packages; **`colcon build` verified on ROS2 Humble** (x2_terrain_msgs + 4 Python pkgs); `ros2 run` resolves all nodes (setup.cfg script-dir fix).*
 - `[x]` **P1-M1-T2** Define `x2_terrain_msgs`: `TerrainCell.msg`, `TerrainGrid.msg`, `TerrainStatus.msg`, `StairEstimate.msg`, `SafetyDecision.msg`, `PolicyDebug.msg`, `srv/ResetTerrainMap.srv` (fields per roadmap §5.3). *ament_cmake + rosidl.*
 - `[x]` **P1-M1-T3** Build `topic_discovery.py` + `tools/check_topics.sh` / `check_qos.sh`; verify real topics with `ros2 topic list` / `ros2 topic info -v`. *topic_discovery in x2_common (P0); tools added. **Topic names + message types verified against SDK lx2501_3-v0.9.0.4** and recorded in `robot_topics.yaml` (verified:true); live QoS check still pending on robot.*
 
@@ -91,7 +91,7 @@
 - `[!]` **P1-M4-T6** Validate detection on each offline bag scene. **BLOCKED on P1-M4-T5** (needs the real bags). Offline analyzer is ready to run them.
 
 ### ✅ Phase 1 Definition of Done
-- `[~]` Perception runs at 8–10 Hz · height map visualized live · flat/slope/curb/stairs/gap detected in offline bags · `unknown_unsafe` used correctly · **no locomotion commands sent** · logs saved per test. *Code + algorithms complete and unit-tested; **live-rate / offline-bag verification blocked on hardware bags + a ROS2 build environment.***
+- `[~]` Perception runs at 8–10 Hz · height map visualized live · flat/slope/curb/stairs/gap detected in offline bags · `unknown_unsafe` used correctly · **no locomotion commands sent** · logs saved per test. *Code + algorithms complete and unit-tested; **pipeline runs as a live ROS2 graph — flat vs stairs distinguished end-to-end (synthetic cloud, integration test)**. Live-rate measurement + real-bag detection still pending hardware bags.*
 
 ---
 
@@ -113,15 +113,15 @@
 - `[x]` **P2-M2-T3** `emergency_stop_node.py` — operator manual e-stop, highest priority. *Latching; stays engaged until explicit reset.*
 
 ## Module 2.3 — Tests & Demo
-- `[x]` **P2-M3-T1** Dry-run mode — publish to debug topic only (no real velocity). *Default; real topic only when dry_run off AND source registered.*
+- `[x]` **P2-M3-T1** Dry-run mode — publish to debug topic only (no real velocity). *Default; real topic only when dry_run off AND source registered. **Validated live** in the integration test (debug TwistStamped only).*
 - `[!]` **P2-M3-T2** Flat-ground walking test (0.05 m/s). **BLOCKED: requires physical robot.**
 - `[!]` **P2-M3-T3** Stair/curb-stop test (must stop before first step). **BLOCKED: requires physical robot.**
 - `[~]` **P2-M3-T4** Missing-sensor watchdog test. *Watchdog logic unit-tested (FreshnessWatchdog + supervisor); node-level integration test needs a ROS2 runtime.*
 - `[!]` **P2-M3-T5** Manual emergency-stop test. **BLOCKED: requires physical robot / ROS2 runtime.** Latching e-stop logic in place.
-- `[x]` **P2-M3-T6** Demo script: walk forward → slow → stop before stairs, with logged stop reason. *`launch/safe_stop_demo.launch.py` (dry-run); SafetyDecision carries the stop reason.*
+- `[x]` **P2-M3-T6** Demo script: walk forward → slow → stop before stairs, with logged stop reason. *`launch/safe_stop_demo.launch.py` (dry-run) + **automated integration test** (`tests/integration/test_perceive_and_stop.py`): live ROS2 graph proves flat→go, stairs→stop with the terrain-driven stop reason.*
 
 ### ✅ Phase 2 Definition of Done
-- `[~]` Source registration works · safe adapter commands slow walking · X2 stops before stairs/gaps/unknown · watchdog stop works · manual stop works · logs prove the stop came from terrain perception. *Logic + dry-run pipeline complete and unit-tested; **on-robot walking/stop tests + AimDK source registration blocked on hardware + SDK.***
+- `[~]` Source registration works · safe adapter commands slow walking · X2 stops before stairs/gaps/unknown · watchdog stop works · manual stop works · logs prove the stop came from terrain perception. *Pipeline **validated end-to-end as a live ROS2 graph in dry-run** (synthetic input): flat ground → commands forward; stairs ahead → classified unsafe → supervisor stop → velocity zeroed. **On-robot walking/stop + AimDK source registration still blocked on hardware + SDK.***
 
 ---
 
