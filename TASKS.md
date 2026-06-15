@@ -42,7 +42,7 @@
 | P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 1 | Architecture scaffolded; training blocked |
 | **Total** | | | **24** | **89** | **48** | |
 
-**Current focus:** Moving into Phase 3/4 on **Isaac Lab via cloud GPU** (NVIDIA Brev, RTX A6000 48 GB). Setup runbook: [training/isaac_lab/SETUP.md](training/isaac_lab/SETUP.md); first step is install → URDF→USD → `scripts/spawn_x2.py` (spawn-and-stand) → wire the RL env → train standing. P0-P2 software is complete + sim-validated; P1/P2 hardware items remain blocked on the robot.
+**Current focus:** Phase 4 RL training on **Isaac Lab 2.3 via cloud GPU** (NVIDIA Brev, L40S 48 GB). **Stage A standing TRAINED** (1500 iters → stays upright full episode; learned a wide-splay stance, an under-specified-reward artifact). **Stage B flat-walk env built** (`Isaac-X2-FlatWalk-v0`): velocity tracking + hip-deviation (anti-splay) + feet-air-time + standing-env mixing → stands planted AND walks; training run next. P0-P2 software complete + sim-validated; P1/P2 hardware items blocked on the robot.
 
 ---
 
