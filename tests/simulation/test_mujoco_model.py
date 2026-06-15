@@ -64,3 +64,17 @@ def test_model_steps_without_exploding():
     assert np.all(np.isfinite(data.qpos)), "qpos went non-finite (model exploded)"
     assert np.all(np.isfinite(data.qvel))
     assert np.max(np.abs(data.qvel)) < 50.0, "implausible velocities (instability)"
+
+
+@mujoco_only
+def test_x2_stands_under_pd():
+    """Stage-A standing AC (roadmap §7.3): the PD controller holds the X2 upright for 3 s."""
+    if not _MESHES.is_dir() or not any(_MESHES.glob("*.STL")):
+        pytest.skip("meshes not present (gitignored); run tools/fetch_x2_assets.sh")
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(_REPO / "training/mujoco/scripts"))
+    import stand
+
+    rc = stand.run(seconds=3.0, spawn_z=0.0, view=False)
+    assert rc == 0, "X2 did not stand stably under PD"

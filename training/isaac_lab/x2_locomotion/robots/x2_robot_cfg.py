@@ -18,20 +18,11 @@ from isaaclab.assets import ArticulationCfg  # noqa: E402
 
 from x2_common import config_loader
 from .x2_actuator_cfg import build_actuator_cfgs
+from .default_pose import DEFAULT_LEG_POSE, BASE_HEIGHT_M  # noqa: F401 (re-exported)
 
 _ASSETS = Path(__file__).resolve().parents[2] / "assets"
 X2_URDF_PATH = os.environ.get("X2_URDF_PATH", str(_ASSETS / "x2_ultra_simple_collision.urdf"))
 X2_USD_PATH = os.environ.get("X2_USD_PATH", str(_ASSETS / "x2.usd"))
-
-# Default standing pose (rad), real X2 URDF v1.3.0 leg joint names. Slightly bent knees;
-# validate in sim (stable PD stand). Knee min is 0 so the bend must stay positive.
-DEFAULT_LEG_POSE = {
-    "left_hip_pitch_joint": -0.20, "left_hip_roll_joint": 0.0, "left_hip_yaw_joint": 0.0,
-    "left_knee_joint": 0.45, "left_ankle_pitch_joint": -0.25, "left_ankle_roll_joint": 0.0,
-    "right_hip_pitch_joint": -0.20, "right_hip_roll_joint": 0.0, "right_hip_yaw_joint": 0.0,
-    "right_knee_joint": 0.45, "right_ankle_pitch_joint": -0.25, "right_ankle_roll_joint": 0.0,
-}
-BASE_HEIGHT_M = 0.55  # initial spawn height — validate against the real model
 
 # Link names from X2_URDF-v1.3.0 meshes.
 FEET_BODY_NAMES = ["left_ankle_roll_link", "right_ankle_roll_link"]

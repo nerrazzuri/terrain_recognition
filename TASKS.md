@@ -146,7 +146,7 @@
 - `[x]` **P3-M3-T4** Simulation smoke tests (`tests/simulation/`), runnable locally / in CI. *Runs without GPU; **MuJoCo tests load the real X2 model, verify 12 leg joints + floating base + DoF, and step physics without exploding**; Isaac-dependent cases skip when isaaclab absent. Plus `training/mujoco/scripts/validate_model.py`.*
 
 ### ✅ Phase 3 Definition of Done
-- `[~]` X2 spawns and stands in sim · joint ordering verified vs AimDK · terrain generator exists · height samples extractable · basic sim tests run. *Joint map / terrain specs / height samples / smoke tests done & tested; **X2 model spawns + steps without exploding in MuJoCo** (secondary sim, validated). Active standing (needs a controller) + the Isaac Lab path still pending Isaac Lab install.*
+- `[~]` X2 spawns and stands in sim · joint ordering verified vs AimDK · terrain generator exists · height samples extractable · basic sim tests run. *Joint map / terrain specs / height samples / smoke tests done & tested; **X2 spawns AND STANDS in MuJoCo** under a PD pose controller (base_z 0.67 m, upright ~1.0, stable 3 s — `training/mujoco/scripts/stand.py`, regression-tested). The Isaac Lab path still pends Isaac Lab install.*
 
 ---
 
@@ -167,7 +167,7 @@
 - `[x]` **P4-M2-T4** `domain_randomization.py` — mass/inertia/CoM, motor strength, PD, action delay, sensor latency, IMU noise, depth/heightmap noise, friction, encoder noise (§8.10). *Seedable; 2 unit tests (within-range, reproducible).*
 
 ## Module 4.3 — Curriculum Tasks
-- `[~]` **P4-M3-T1** Stage A — standing (`x2_standing_env_cfg.py`): stand 30 s, recover small pushes. *Env cfg scaffolded; **blocked on Isaac Lab + asset**.*
+- `[~]` **P4-M3-T1** Stage A — standing (`x2_standing_env_cfg.py`): stand 30 s, recover small pushes. *Isaac Lab env cfg scaffolded; **standing validated in MuJoCo** (PD pose hold, stable 3 s) confirming the default pose + gains. RL standing (30 s, push recovery) still needs Isaac Lab/GPU.*
 - `[~]` **P4-M3-T2** Stage B — flat walking (`x2_flat_walk_env_cfg.py`): fwd 0–0.3 m/s, yaw ±0.3 rad/s. *Scaffolded; blocked.*
 - `[~]` **P4-M3-T3** Stage C — rough terrain (`x2_rough_env_cfg.py`): 1–5 cm noise, mild slopes. *Scaffolded; blocked.*
 - `[~]` **P4-M3-T4** Stage D — single step / curb: 2→5→8→12→15 cm. *In `x2_stairs_env_cfg` + terrain_spec level 3; blocked.*
