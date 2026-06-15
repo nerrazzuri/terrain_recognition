@@ -156,7 +156,7 @@
 > Action space: start **12-DoF legs only** (joint position offsets). Expand to +3 waist (+arms for balance) only after legs work. Timing: physics 200 Hz, policy 50 Hz, decimation 4.
 
 ## Module 4.1 — Training Infrastructure
-- `[~]` **P4-M1-T1** PPO training config + `scripts/train.py` (512 envs → 1024 if stable; camera rendering off for height-map version). *`training_default.yaml` complete; `train.py` arg/config wiring done; **rsl_rl launch blocked on Isaac Lab + GPU**.*
+- `[x]` **P4-M1-T1** PPO training config + `scripts/train.py` (512 envs → 1024 if stable; camera rendering off for height-map version). ***Runs reproducibly on Isaac Lab 2.3 + rsl_rl (cloud L40S 48 GB):** manager-based env builds (83-dim obs, 12-DoF leg action, 10 reward terms), PPO trains and checkpoints. Stage-A standing env in `tasks/standing/`. Convergence run (1500 iters) pending.*
 - `[x]` **P4-M1-T2** `observations.py` — sim observation builder (cmd vel ×3, base ang vel, projected gravity, joint pos err, joint vel, prev action, gait phase sin/cos, height samples 11×11=121). Normalize all. *Pure numpy; dim=168 contract; 6 unit tests (order, missing/dim guards, normalizer zero-std guard). Shared with deployment.*
 - `[~]` **P4-M1-T3** Network: height_encoder + proprio_encoder + actor + critic (privileged) per §8.6. *`network.py` exact architecture; **blocked to run on torch**.*
 
@@ -167,7 +167,7 @@
 - `[x]` **P4-M2-T4** `domain_randomization.py` — mass/inertia/CoM, motor strength, PD, action delay, sensor latency, IMU noise, depth/heightmap noise, friction, encoder noise (§8.10). *Seedable; 2 unit tests (within-range, reproducible).*
 
 ## Module 4.3 — Curriculum Tasks
-- `[~]` **P4-M3-T1** Stage A — standing (`x2_standing_env_cfg.py`): stand 30 s, recover small pushes. *Isaac Lab env cfg scaffolded; **standing validated in MuJoCo** (PD pose hold, stable 3 s) confirming the default pose + gains. RL standing (30 s, push recovery) still needs Isaac Lab/GPU.*
+- `[~]` **P4-M3-T1** Stage A — standing (`x2_standing_env_cfg.py`): stand 30 s, recover small pushes. *Full manager-based env runs + trains on Isaac Lab 2.3 (L40S); reward = alive + target-height + upright, penalise motion/effort, terminate on tilt/contact; push DR included. **Convergence run pending** (10-iter smoke ran; needs ~1500 iters). MuJoCo PD stand already validated the pose/gains.*
 - `[~]` **P4-M3-T2** Stage B — flat walking (`x2_flat_walk_env_cfg.py`): fwd 0–0.3 m/s, yaw ±0.3 rad/s. *Scaffolded; blocked.*
 - `[~]` **P4-M3-T3** Stage C — rough terrain (`x2_rough_env_cfg.py`): 1–5 cm noise, mild slopes. *Scaffolded; blocked.*
 - `[~]` **P4-M3-T4** Stage D — single step / curb: 2→5→8→12→15 cm. *In `x2_stairs_env_cfg` + terrain_spec level 3; blocked.*
