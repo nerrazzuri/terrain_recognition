@@ -46,11 +46,15 @@ def main():
     runner.load(args.checkpoint)
     policy = runner.get_inference_policy(device=agent_cfg.device)
 
-    obs, _ = env.get_observations()
+    # rsl_rl versions differ: get_observations() may return obs or (obs, extras)
+    obs = env.get_observations()
+    if isinstance(obs, tuple):
+        obs = obs[0]
     while simulation_app.is_running():
         with torch.inference_mode():
             actions = policy(obs)
-            obs, _, _, _ = env.step(actions)
+            step_out = env.step(actions)
+            obs = step_out[0]
 
     env.close()
     simulation_app.close()
