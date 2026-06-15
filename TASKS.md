@@ -42,7 +42,7 @@
 | P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 1 | Architecture scaffolded; training blocked |
 | **Total** | | | **24** | **89** | **48** | |
 
-**Current focus:** Software for P0-P2 is complete (perceive terrain & stop safely — the First Sprint). P3-P6 logic is implemented + unit-tested; their sim/training/hardware execution is blocked on Isaac Lab + GPU + torch + the X2 USD asset + the physical robot (see per-task blockers).
+**Current focus:** Moving into Phase 3/4 on **Isaac Lab via cloud GPU** (NVIDIA Brev, RTX A6000 48 GB). Setup runbook: [training/isaac_lab/SETUP.md](training/isaac_lab/SETUP.md); first step is install → URDF→USD → `scripts/spawn_x2.py` (spawn-and-stand) → wire the RL env → train standing. P0-P2 software is complete + sim-validated; P1/P2 hardware items remain blocked on the robot.
 
 ---
 
@@ -130,7 +130,7 @@
 
 ## Module 3.1 — Robot Model Assets
 - `[x]` **P3-M1-T1** Locate/collect X2 URDF/MJCF, meshes, joint names/order/limits, default pose, mass, inertia, foot collision, torque/velocity limits, PD estimates, actuator delay, self-collision pairs (roadmap §7.2). *From **X2_URDF-v1.3.0**: `x2_ultra.urdf` + `x2_ultra_simple_collision.urdf` + MJCF (`x2_ultra.xml`) + meshes placed under `training/`. Real leg+waist joint names/limits/effort/velocity extracted into `joint_limits_x2_ultra.yaml` (verified:true). Meshes gitignored (~112 MB); repopulate via `tools/fetch_x2_assets.sh`.*
-- `[~]` **P3-M1-T2** Convert model to an Isaac Lab asset (`x2.usd`); place under `training/isaac_lab/assets/`. *URDF placed; `x2_robot_cfg` spawns via Isaac Lab's URDF importer or a converted USD (`X2_USD_PATH`); `assets_available()` now true. **USD conversion command documented (assets/SOURCES.md); running it needs Isaac Lab.***
+- `[~]` **P3-M1-T2** Convert model to an Isaac Lab asset (`x2.usd`); place under `training/isaac_lab/assets/`. *URDF placed; `x2_robot_cfg` spawns via Isaac Lab's URDF importer or a converted USD (`X2_USD_PATH`); `assets_available()` now true. **Conversion command + full runbook in [training/isaac_lab/SETUP.md](training/isaac_lab/SETUP.md)** (NVIDIA Brev / A6000); run on the GPU box.*
 
 ## Module 3.2 — Config & Validation
 - `[x]` **P3-M2-T1** `x2_joint_map.py` — map sim joints ↔ AimDK order (legs: L then R; hip_pitch/roll/yaw, knee, ankle_pitch/roll). *Pure logic, 6 unit tests; **leg order VERIFIED against the robot MC `robot_model.yaml`** — full 31-DoF body order in `AIMDK_BODY_ORDER` (legs 0-11 → waist → head → arms); limits from URDF v1.3.0.*
