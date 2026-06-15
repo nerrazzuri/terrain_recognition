@@ -13,7 +13,7 @@ import argparse
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Play a trained X2 policy.")
-parser.add_argument("--task", default="standing", choices=["standing"])
+parser.add_argument("--task", default="standing", choices=["standing", "flat_walk"])
 parser.add_argument("--checkpoint", required=True)
 parser.add_argument("--num_envs", type=int, default=16)
 AppLauncher.add_app_launcher_args(parser)
@@ -28,10 +28,12 @@ from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper  # noqa: E402
 
 import x2_locomotion.tasks  # noqa: F401,E402
 from x2_locomotion.tasks.standing.x2_standing_env_cfg import X2StandingEnvCfg  # noqa: E402
-from x2_locomotion.agents.rsl_rl_ppo_cfg import X2StandingPPORunnerCfg  # noqa: E402
+from x2_locomotion.tasks.flat_walk.x2_flat_walk_env_cfg import X2FlatWalkEnvCfg  # noqa: E402
+from x2_locomotion.agents.rsl_rl_ppo_cfg import (  # noqa: E402
+    X2StandingPPORunnerCfg, X2FlatWalkPPORunnerCfg)
 
-_ENV_CFGS = {"standing": X2StandingEnvCfg}
-_AGENT_CFGS = {"standing": X2StandingPPORunnerCfg}
+_ENV_CFGS = {"standing": X2StandingEnvCfg, "flat_walk": X2FlatWalkEnvCfg}
+_AGENT_CFGS = {"standing": X2StandingPPORunnerCfg, "flat_walk": X2FlatWalkPPORunnerCfg}
 
 
 def main():

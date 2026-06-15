@@ -168,7 +168,7 @@
 
 ## Module 4.3 — Curriculum Tasks
 - `[~]` **P4-M3-T1** Stage A — standing (`x2_standing_env_cfg.py`): stand 30 s, recover small pushes. ***Trained & converged** (1500 iters, L40S, ~40k steps/s): X2 stays upright the full 20 s episode in ~93% of cases (`bad_orientation` 1.0→0.05), survives periodic pushes, mean reward +3. **Caveat:** drifts/yaws while upright (no planar-velocity penalty yet) — adding velocity-command tracking next for a planted stand + Stage-B walking.*
-- `[~]` **P4-M3-T2** Stage B — flat walking (`x2_flat_walk_env_cfg.py`): fwd 0–0.3 m/s, yaw ±0.3 rad/s. *Scaffolded; blocked.*
+- `[~]` **P4-M3-T2** Stage B — flat walking (`x2_flat_walk_env_cfg.py`): fwd 0–0.3 m/s, yaw ±0.3 rad/s. *Env built on Isaac Lab 2.3: velocity-command tracking + feet-air-time + hip-deviation (anti-splay) rewards; ~20% standing-env mixing so one policy stands planted AND walks. Registered Isaac-X2-FlatWalk-v0. Training run pending.*
 - `[~]` **P4-M3-T3** Stage C — rough terrain (`x2_rough_env_cfg.py`): 1–5 cm noise, mild slopes. *Scaffolded; blocked.*
 - `[~]` **P4-M3-T4** Stage D — single step / curb: 2→5→8→12→15 cm. *In `x2_stairs_env_cfg` + terrain_spec level 3; blocked.*
 - `[~]` **P4-M3-T5** Stage E — stairs up (`x2_stairs_env_cfg.py`): rise 5–18 cm, tread 24–35 cm, 1–8 steps. *Scaffolded (terrain_spec level 4); blocked.*

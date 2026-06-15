@@ -112,17 +112,42 @@ class EventCfg:
 
 @configclass
 class RewardsCfg:
-    alive = RewTerm(func=mdp.is_alive, weight=1.0)
-    terminating = RewTerm(func=mdp.is_terminated, weight=-200.0)
-    base_height = RewTerm(func=mdp.base_height_l2, weight=-10.0,
+    """Locomotion reward set. Zero command ⇒ stand planted; non-zero ⇒ walk.
+
+    Velocity tracking + a hip roll/yaw deviation penalty replace the bare alive bonus, which
+    is what caused the wide-splay / drifting stance (the policy gamed "stay upright" by
+    spreading its legs). Tracking the (zero) command keeps it planted; the deviation penalty
+    keeps feet under the hips.
+    """
+
+    # --- task: track the commanded base velocity ---
+    track_lin_vel_xy = RewTerm(func=mdp.track_lin_vel_xy_exp, weight=1.0,
+                               params={"command_name": "base_velocity", "std": 0.5})
+    track_ang_vel_z = RewTerm(func=mdp.track_ang_vel_z_exp, weight=0.5,
+                              params={"command_name": "base_velocity", "std": 0.5})
+    # --- posture / stability ---
+    flat_orientation = RewTerm(func=mdp.flat_orientation_l2, weight=-2.5)
+    base_height = RewTerm(func=mdp.base_height_l2, weight=-1.0,
                           params={"target_height": BASE_HEIGHT_M})
-    flat_orientation = RewTerm(func=mdp.flat_orientation_l2, weight=-5.0)
     lin_vel_z = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
     ang_vel_xy = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+    # keep a natural, narrow stance (anti-splay)
+    hip_deviation = RewTerm(func=mdp.joint_deviation_l1, weight=-0.5,
+                            params={"asset_cfg": SceneEntityCfg(
+                                "robot", joint_names=[".*_hip_yaw_joint", ".*_hip_roll_joint"])})
+    # encourage stepping when commanded to move (gated to ~0 at zero command)
+    feet_air_time = RewTerm(func=mdp.feet_air_time, weight=0.25,
+                            params={"command_name": "base_velocity",
+                                    "sensor_cfg": SceneEntityCfg(
+                                        "contact_forces", body_names=".*ankle_roll.*"),
+                                    "threshold": 0.4})
+    # --- effort / smoothness ---
     dof_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2.0e-5)
     dof_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
     action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
     dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-1.0)
+    # --- fall penalty ---
+    terminating = RewTerm(func=mdp.is_terminated, weight=-200.0)
 
 
 @configclass

@@ -40,3 +40,10 @@ class X2StandingPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         desired_kl=0.01,
         max_grad_norm=1.0,
     )
+
+
+@configclass
+class X2FlatWalkPPORunnerCfg(X2StandingPPORunnerCfg):
+    """Stage B flat walking — same PPO setup, more iterations (walking is harder)."""
+    experiment_name = "x2_flat_walk"
+    max_iterations = 3000
