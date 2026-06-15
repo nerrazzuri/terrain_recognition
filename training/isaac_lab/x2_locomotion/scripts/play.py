@@ -1,29 +1,60 @@
-"""play.py (P4-M4-T1) — roll out a trained checkpoint in sim for visual inspection.
+"""play.py (P4-M4-T1) — roll out a trained X2 checkpoint (Isaac Lab 2.3 + rsl_rl).
 
-BLOCKED to run: requires Isaac Lab + a trained checkpoint. See evaluate_policy.py for the
-quantitative success-rate report.
+Loads a checkpoint and runs the policy for visual inspection. Add --livestream 2 (drop
+--headless) to watch in the /viewer tab.
 
-Usage: python -m x2_locomotion.scripts.play --task stairs --checkpoint <run>/model.pt
+    python training/isaac_lab/x2_locomotion/scripts/play.py --task standing \
+        --checkpoint logs/rsl_rl/x2_standing/<run>/model_final.pt --livestream 2 --num_envs 16
 """
 from __future__ import annotations
 
 import argparse
-import sys
+
+from isaaclab.app import AppLauncher
+
+parser = argparse.ArgumentParser(description="Play a trained X2 policy.")
+parser.add_argument("--task", default="standing", choices=["standing"])
+parser.add_argument("--checkpoint", required=True)
+parser.add_argument("--num_envs", type=int, default=16)
+AppLauncher.add_app_launcher_args(parser)
+args = parser.parse_args()
+app_launcher = AppLauncher(args)
+simulation_app = app_launcher.app
+
+import torch  # noqa: E402
+from rsl_rl.runners import OnPolicyRunner  # noqa: E402
+from isaaclab.envs import ManagerBasedRLEnv  # noqa: E402
+from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper  # noqa: E402
+
+import x2_locomotion.tasks  # noqa: F401,E402
+from x2_locomotion.tasks.standing.x2_standing_env_cfg import X2StandingEnvCfg  # noqa: E402
+from x2_locomotion.agents.rsl_rl_ppo_cfg import X2StandingPPORunnerCfg  # noqa: E402
+
+_ENV_CFGS = {"standing": X2StandingEnvCfg}
+_AGENT_CFGS = {"standing": X2StandingPPORunnerCfg}
 
 
-def main(argv=None) -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--task", default="flat_walk")
-    ap.add_argument("--checkpoint", required=True)
-    args = ap.parse_args(argv)
-    print(f"[play] task={args.task} checkpoint={args.checkpoint}")
-    try:
-        from isaaclab.app import AppLauncher  # noqa: F401
-    except Exception as exc:
-        print(f"[play] BLOCKED: Isaac Lab not available ({exc}).")
-        return 2
-    raise NotImplementedError("load checkpoint and roll out once Isaac Lab is installed")
+def main():
+    env_cfg = _ENV_CFGS[args.task]()
+    env_cfg.scene.num_envs = args.num_envs
+    agent_cfg = _AGENT_CFGS[args.task]()
+    agent_cfg.device = args.device
+
+    env = ManagerBasedRLEnv(cfg=env_cfg)
+    env = RslRlVecEnvWrapper(env)
+    runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    runner.load(args.checkpoint)
+    policy = runner.get_inference_policy(device=agent_cfg.device)
+
+    obs, _ = env.get_observations()
+    while simulation_app.is_running():
+        with torch.inference_mode():
+            actions = policy(obs)
+            obs, _, _, _ = env.step(actions)
+
+    env.close()
+    simulation_app.close()
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

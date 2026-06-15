@@ -1,52 +1,72 @@
-"""train.py (P4-M1-T1) — PPO training entry point.
+"""train.py (P4-M1-T1) — PPO training for the X2 (Isaac Lab 2.3 + rsl_rl).
 
-Launches Isaac Lab + rsl_rl PPO on a chosen curriculum stage, with config from
-configs/training_default.yaml (512 envs, height-map version, camera rendering off).
+Trains a curriculum-stage policy. Stage A = standing (Isaac-X2-Standing-v0). Instantiates the
+env cfg + rsl_rl runner cfg directly (no hydra/registry) for robustness, mirroring the Isaac
+Lab rsl_rl training flow.
 
-BLOCKED to run: requires Isaac Lab, rsl_rl and a GPU. The argument parsing + config wiring
-are real; the sim launch is guarded so a missing Isaac Lab gives a clear message, not a crash.
-
-Usage: python -m x2_locomotion.scripts.train --task standing --max-iterations 1500
+Run on the GPU box (see training/isaac_lab/SETUP.md):
+    python training/isaac_lab/x2_locomotion/scripts/train.py --task standing --num_envs 4096 --headless
 """
 from __future__ import annotations
 
 import argparse
-import sys
 
-from x2_common import config_loader
+from isaaclab.app import AppLauncher
 
-_TASKS = {"standing", "flat_walk", "rough", "stairs"}
+parser = argparse.ArgumentParser(description="Train an X2 locomotion policy (rsl_rl PPO).")
+parser.add_argument("--task", default="standing", choices=["standing"],
+                    help="curriculum stage (more stages added as they are built)")
+parser.add_argument("--num_envs", type=int, default=None)
+parser.add_argument("--max_iterations", type=int, default=None)
+parser.add_argument("--seed", type=int, default=0)
+AppLauncher.add_app_launcher_args(parser)
+args = parser.parse_args()
+app_launcher = AppLauncher(args)
+simulation_app = app_launcher.app
+
+import os  # noqa: E402
+from datetime import datetime  # noqa: E402
+
+import gymnasium as gym  # noqa: E402
+from rsl_rl.runners import OnPolicyRunner  # noqa: E402
+from isaaclab.envs import ManagerBasedRLEnv  # noqa: E402
+from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper  # noqa: E402
+
+import x2_locomotion.tasks  # noqa: F401,E402  (registers the gym tasks)
+from x2_locomotion.tasks.standing.x2_standing_env_cfg import X2StandingEnvCfg  # noqa: E402
+from x2_locomotion.agents.rsl_rl_ppo_cfg import X2StandingPPORunnerCfg  # noqa: E402
+
+_ENV_CFGS = {"standing": X2StandingEnvCfg}
+_AGENT_CFGS = {"standing": X2StandingPPORunnerCfg}
 
 
-def main(argv=None) -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--task", choices=sorted(_TASKS), default="standing")
-    ap.add_argument("--max-iterations", type=int, default=1500)
-    ap.add_argument("--num-envs", type=int, default=None)
-    ap.add_argument("--seed", type=int, default=None)
-    args = ap.parse_args(argv)
+def main():
+    env_cfg = _ENV_CFGS[args.task]()
+    agent_cfg = _AGENT_CFGS[args.task]()
+    if args.num_envs:
+        env_cfg.scene.num_envs = args.num_envs
+    if args.max_iterations:
+        agent_cfg.max_iterations = args.max_iterations
+    env_cfg.seed = agent_cfg.seed = args.seed
+    agent_cfg.device = args.device
 
-    cfg = config_loader.load_config("training_default")
-    num_envs = args.num_envs or int(cfg["sim"]["num_envs"])
-    seed = args.seed if args.seed is not None else int(cfg.get("seed", 0))
-    print(f"[train] task={args.task} num_envs={num_envs} seed={seed} "
-          f"iters={args.max_iterations}")
+    log_dir = os.path.abspath(os.path.join(
+        "logs", "rsl_rl", agent_cfg.experiment_name,
+        datetime.now().strftime("%Y-%m-%d_%H-%M-%S")))
+    os.makedirs(log_dir, exist_ok=True)
+    print(f"[train] task={args.task} num_envs={env_cfg.scene.num_envs} "
+          f"iters={agent_cfg.max_iterations} log_dir={log_dir}")
 
-    try:
-        from isaaclab.app import AppLauncher  # noqa: F401
-    except Exception as exc:
-        print(f"[train] BLOCKED: Isaac Lab not available ({exc}).")
-        print("        Install Isaac Lab + rsl_rl and provide the X2 USD asset (P3-M1).")
-        return 2
+    env = ManagerBasedRLEnv(cfg=env_cfg)
+    env = RslRlVecEnvWrapper(env)
+    runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)
 
-    # --- with Isaac Lab present, the real pipeline would: -------------------------------
-    #   1. AppLauncher(headless=True) to start Isaac Sim
-    #   2. build the env cfg for args.task (standing/flat_walk/rough/stairs env cfgs)
-    #   3. wrap with rsl_rl OnPolicyRunner using the ppo block from training_default.yaml
-    #   4. runner.learn(num_learning_iterations=args.max_iterations)
-    #   5. save checkpoints + normalization stats for export_onnx / deployment
-    raise NotImplementedError("wire rsl_rl OnPolicyRunner once Isaac Lab is installed")
+    runner.save(os.path.join(log_dir, "model_final.pt"))
+    print(f"[train] done. checkpoint: {os.path.join(log_dir, 'model_final.pt')}")
+    env.close()
+    simulation_app.close()
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
