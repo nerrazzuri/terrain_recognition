@@ -1,0 +1,44 @@
+# X2 Ultra joint limits — VERIFIED against the official X2 URDF v1.3.0 (x2_ultra.urdf).
+# Order: left leg then right leg. Units: radians (position), N·m (effort), rad/s (velocity).
+# Never hardcode these in source; load via x2_common.config_loader.
+#
+# Source: X2_URDF-v1.3.0/x2_ultra.urdf (revolute <limit> tags).
+# NOTE: hip_roll and hip_yaw limits are mirrored between left and right (expected).
+
+units: radians
+verified: true
+source: X2_URDF-v1.3.0/x2_ultra.urdf
+
+# Canonical leg joint order (per-leg). Sim<->AimDK index mapping done in x2_joint_map.py;
+# the AimDK JointCommandArray index order must still be confirmed vs /aima/hal/joint/leg/state.
+leg_joint_order:
+  - hip_pitch
+  - hip_roll
+  - hip_yaw
+  - knee
+  - ankle_pitch
+  - ankle_roll
+
+# Per-joint [min, max] position limits + velocity/effort caps (from URDF v1.3.0).
+joints:
+  left_hip_pitch_joint:    {min: -2.704,  max: 2.556,  vel_max: 11.936, effort_max: 120.0}
+  left_hip_roll_joint:     {min: -0.235,  max: 2.906,  vel_max: 11.936, effort_max: 120.0}
+  left_hip_yaw_joint:      {min: -1.684,  max: 3.43,   vel_max: 11.936, effort_max: 120.0}
+  left_knee_joint:         {min: 0.0,     max: 2.4073, vel_max: 11.936, effort_max: 120.0}
+  left_ankle_pitch_joint:  {min: -0.803,  max: 0.453,  vel_max: 13.087, effort_max: 36.0}
+  left_ankle_roll_joint:   {min: -0.262,  max: 0.262,  vel_max: 15.077, effort_max: 24.0}
+  right_hip_pitch_joint:   {min: -2.704,  max: 2.556,  vel_max: 11.936, effort_max: 120.0}
+  right_hip_roll_joint:    {min: -2.906,  max: 0.235,  vel_max: 11.936, effort_max: 120.0}
+  right_hip_yaw_joint:     {min: -3.43,   max: 1.684,  vel_max: 11.936, effort_max: 120.0}
+  right_knee_joint:        {min: 0.0,     max: 2.4073, vel_max: 11.936, effort_max: 120.0}
+  right_ankle_pitch_joint: {min: -0.803,  max: 0.453,  vel_max: 13.088, effort_max: 36.0}
+  right_ankle_roll_joint:  {min: -0.2625, max: 0.2625, vel_max: 15.077, effort_max: 24.0}
+
+# Waist joints (added to the action space only after the 12-DoF leg policy works, roadmap §8.4).
+waist_joints:
+  waist_yaw_joint:   {min: -3.43,  max: 2.382, vel_max: 11.936, effort_max: 120.0}
+  waist_pitch_joint: {min: -0.314, max: 0.314, vel_max: 13.088, effort_max: 48.0}
+  waist_roll_joint:  {min: -0.488, max: 0.488, vel_max: 13.088, effort_max: 48.0}
+
+# Soft-limit margin (rad) kept inside the hard limits by the action filter.
+soft_limit_margin_rad: 0.05

@@ -1,0 +1,82 @@
+# Default RL training config (Phase 4). Height-map policy, PPO asymmetric actor-critic.
+# Follows roadmap §8. Tune per GPU; values target an RTX 4060-class card.
+
+algorithm: ppo
+seed: 0
+
+sim:
+  physics_dt_s: 0.005          # 200 Hz
+  policy_dt_s: 0.02            # 50 Hz
+  control_decimation: 4
+  num_envs: 512               # raise to 1024 if stable
+  camera_rendering: false      # off for the height-map version
+
+action:
+  space: legs_12dof            # 12 leg joints; expand to +waist/+arms only after this works
+  type: joint_position_offset  # offset from nominal pose
+
+observation:
+  normalize: true
+  components:                  # ordering is part of the contract (must match deployment)
+    command_velocity: 3        # forward, lateral, yaw
+    base_angular_velocity: 3
+    projected_gravity: 3
+    joint_position_error: 12
+    joint_velocity: 12
+    previous_action: 12
+    gait_phase: 2              # sin, cos
+    height_samples: 121        # 11 x 11 grid
+  height_samples:
+    grid: [11, 11]
+    x_min_m: -0.4
+    x_max_m: 1.2
+    y_min_m: -0.5
+    y_max_m: 0.5
+
+network:
+  height_encoder: [128, 64]
+  proprio_encoder: [256, 128]
+  actor: [256, 256]
+  critic: [512, 256]           # privileged input
+  activation: elu
+
+ppo:
+  num_steps_per_env: 24
+  learning_rate: 3.0e-4
+  gamma: 0.99
+  lam: 0.95
+  clip_ratio: 0.2
+  entropy_coef: 0.005
+  value_loss_coef: 1.0
+  max_grad_norm: 1.0
+  num_learning_epochs: 5
+  num_mini_batches: 4
+
+curriculum:
+  stages: [standing, flat_walk, rough, single_step, stairs_up, stairs_down, mixed]
+  command:
+    forward_velocity_mps: [0.0, 0.3]
+    lateral_velocity_mps: [0.0, 0.0]
+    yaw_velocity_radps: [-0.3, 0.3]
+
+domain_randomization:
+  body_mass_pct: 0.10
+  link_inertia_pct: 0.10
+  com_offset_m: 0.02
+  motor_strength_pct: 0.20
+  pd_gain_pct: 0.20
+  action_delay_steps: [1, 3]
+  sensor_latency_ms: [10, 60]
+  terrain_friction: [0.4, 1.2]
+  imu_noise: true
+  heightmap_noise_m: 0.02
+  encoder_noise: true
+
+export:
+  onnx: true
+  validate_against_pytorch: true
+  numeric_tolerance: 1.0e-4
+
+logging:
+  save_dir: logs/training
+  log_reward_components: true

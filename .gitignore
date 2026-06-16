@@ -57,3 +57,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# X2 model meshes — large binaries (~112 MB) from X2_URDF-v1.3.0. Not committed.
+# Repopulate from the URDF zip with: tools/fetch_x2_assets.sh <path-to-X2_URDF-*.zip>
+training/isaac_lab/assets/meshes/*.STL

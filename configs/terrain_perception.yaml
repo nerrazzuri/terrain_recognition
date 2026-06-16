@@ -1,0 +1,59 @@
+# Terrain perception parameters (Phase 1). Thresholds/ROIs live here, not in source.
+# Values follow roadmap §5.4; tune against recorded bags.
+
+pointcloud_projector:
+  base_frame: base_link            # verify on robot
+  roi:                             # region of interest in base frame (metres)
+    x_min_m: 0.0
+    x_max_m: 2.0
+    y_min_m: -0.8
+    y_max_m: 0.8
+    z_min_m: -0.5
+    z_max_m: 1.0
+  voxel_size_m: 0.03
+  min_rate_hz: 8.0                 # acceptance: >=8 Hz from 10 Hz input
+  missing_cloud_timeout_s: 2.0     # survive 2 s of missing cloud without crashing
+
+ground_plane_estimator:
+  method: ransac                   # ransac | robust_lsq
+  ransac_distance_thresh_m: 0.02
+  ransac_max_iterations: 200
+  use_imu_prior: true
+  flat_slope_tolerance_deg: 2.0    # acceptance: flat within +/-2 deg
+
+heightmap:
+  map_size_x_m: 2.0
+  map_size_y_m: 1.6
+  resolution_m: 0.04               # -> 50 x 40 cells
+  width_cells: 50
+  height_cells: 40
+  update_rate_hz: 10.0
+  history_window_s: 0.5            # time decay
+  unknown_confidence: 0.0          # unknown cells are NOT flat
+
+slope_detector:
+  slope_threshold_deg: 6.0         # above -> slope_up / slope_down
+
+stair_detector:
+  min_rise_m: 0.05
+  max_rise_m: 0.20
+  min_tread_m: 0.20
+  max_tread_m: 0.40
+  min_repeated_steps: 2            # reject clutter lacking repeated structure
+  riser_edge_min_dh_m: 0.04        # vertical discontinuity to count as a step edge
+  min_confidence_to_clear: 0.7     # never safe_to_continue under uncertainty
+  stop_distance_margin_m: 0.3      # added to first-step distance for recommended stop
+
+gap_detector:
+  min_drop_m: 0.10                 # missing/lower cells below this treated as a gap
+  min_gap_width_m: 0.08
+  unknown_is_unsafe: true
+
+terrain_classifier:
+  low_confidence_threshold: 0.4    # below -> unknown_unsafe
+  single_step_min_height_m: 0.05
+  roughness_threshold_m: 0.03      # height std above this -> rough_ground
+
+logging:
+  save_dir: logs/perception
+  enabled: true

@@ -1,0 +1,31 @@
+# Global safety limits and the master approval flag. Read by safety supervisors and the
+# policy runtime. See SAFETY.md. Fail closed everywhere.
+
+# MUST stay false until the Phase 5 documented safety review (roadmap §14).
+# While false: policy nodes run dry-run only, debug topics only, no leg joint command.
+REAL_ROBOT_LOW_LEVEL_LEG_POLICY_APPROVED: false
+
+watchdog_timeouts_s:
+  terrain_status: 0.5
+  imu: 0.2
+  command: 0.2                  # robot MC CommandGuard expiration_time = 200 ms (verified)
+  policy_inference: 0.05        # 50 Hz policy -> inference must be < 20 ms; cut if slow
+
+orientation_limits_deg:
+  max_roll: 15.0
+  max_pitch: 15.0
+
+velocity_clamps:
+  max_forward_mps: 0.12
+  max_lateral_mps: 0.0
+  max_yaw_radps: 0.3
+
+action_filter:
+  max_joint_target_rate_radps: 4.0
+  max_joint_velocity_radps: 8.0
+  low_pass_alpha: 0.2           # 0..1, lower = smoother
+  reject_nonfinite: true        # NaN/Inf action -> safe stop
+
+emergency_stop:
+  topic: /x2/operator/estop
+  immediate_zero: true          # highest priority, overrides all

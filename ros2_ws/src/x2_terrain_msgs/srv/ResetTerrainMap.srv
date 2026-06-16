@@ -1,0 +1,4 @@
+bool clear_history
+---
+bool success
+string message
