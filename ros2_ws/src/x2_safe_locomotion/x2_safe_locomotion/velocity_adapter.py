@@ -37,12 +37,15 @@ class VelocityAdapter(Node):
         self._dry_run = bool(safe["dry_run"]["enabled"])
         self._terrain_wd = FreshnessWatchdog(
             float(safe["safety_supervisor"]["terrain_status_timeout_s"]))
+        self._safety_wd = FreshnessWatchdog(
+            float(safe["safety_supervisor"]["terrain_status_timeout_s"]))
         self._period = 0.05
 
         self._desired_forward = 0.0
         self._terrain_type = "unknown_unsafe"
         self._safe_to_continue = False
         self._t_terrain = None
+        self._t_safety = None
         self._supervisor_stop = True       # fail closed until we hear otherwise
         self._source_registered = False
 
@@ -77,6 +80,7 @@ class VelocityAdapter(Node):
         self._safe_to_continue = msg.safe_to_continue
 
     def _on_safety(self, msg: SafetyDecision):
+        self._t_safety = self._now()
         self._supervisor_stop = msg.stop
 
     def _on_desired(self, msg: Twist):
@@ -89,17 +93,20 @@ class VelocityAdapter(Node):
         self._heartbeat.publish(Bool(data=True))
         now = self._now()
         terrain_fresh = self._terrain_wd.is_fresh(self._t_terrain, now)
+        safety_fresh = self._safety_wd.is_fresh(self._t_safety, now)
 
-        # Fail closed: stale perception or supervisor stop -> zero target.
-        if not terrain_fresh or self._supervisor_stop:
+        # Fail closed: any missing critical input → immediate hard stop, not a ramp.
+        hard_stop = not terrain_fresh or not safety_fresh or self._supervisor_stop
+        if hard_stop:
             target_forward = 0.0
         else:
             target_forward = self._policy.safe_velocity(
                 self._desired_forward, self._terrain_type, self._safe_to_continue)
 
-        if target_forward <= 0.0:
-            cmd = self._smoother.emergency_stop() if self._supervisor_stop \
-                else self._smoother.step(0.0, 0.0, self._period)
+        if hard_stop:
+            cmd = self._smoother.emergency_stop()
+        elif target_forward <= 0.0:
+            cmd = self._smoother.step(0.0, 0.0, self._period)
         else:
             cmd = self._smoother.step(target_forward, 0.0, self._period)
 

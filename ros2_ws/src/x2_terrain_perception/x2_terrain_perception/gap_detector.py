@@ -35,8 +35,15 @@ class GapDetector(Node):
             msg.width, msg.height, msg.resolution_m, msg.origin_x_m, msg.origin_y_m,
             msg.height_m, msg.confidence)
         px, pz = forward_height_profile(h2d, xpos)
-        cprof = np.nanmean(c2d[c2d.shape[0] // 2 - 3: c2d.shape[0] // 2 + 3, :], axis=0)
-        cprof = cprof[: px.shape[0]] if cprof.shape[0] >= px.shape[0] else cprof
+        # Build confidence profile over the same central band with the same valid-column mask
+        # that forward_height_profile applies internally (drops all-NaN columns).
+        n_y = h2d.shape[0]
+        c = n_y // 2
+        band_h = h2d[max(0, c - 3): min(n_y, c + 3), :]
+        band_c = c2d[max(0, c - 3): min(n_y, c + 3), :]
+        with np.errstate(invalid="ignore"):
+            valid_cols = ~np.all(np.isnan(band_h), axis=0)
+        cprof = np.nanmean(band_c, axis=0)[valid_cols]
         res = gaps.detect_gap(px, pz, cprof, self._params)
         self.flag_pub.publish(Bool(data=bool(res.gap_detected or res.unknown_ahead)))
         self.reason_pub.publish(String(data=res.reason))

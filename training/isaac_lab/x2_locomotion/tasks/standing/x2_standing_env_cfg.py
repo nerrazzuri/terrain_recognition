@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 
+import torch
 import isaaclab.sim as sim_utils
 import isaaclab.envs.mdp as mdp
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
@@ -28,8 +29,18 @@ from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
-from ...robots.x2_robot_cfg import build_robot_cfg, BASE_HEIGHT_M
+from ...robots.x2_robot_cfg import build_robot_cfg, BASE_HEIGHT_M, TERMINATION_BODY_NAMES
 from ...robots.x2_joint_map import aimdk_leg_order
+
+
+def _gait_phase_zeros(env) -> torch.Tensor:
+    """Placeholder gait phase (sin/cos) — zeros for Stage A standing. Shape: (N, 2)."""
+    return torch.zeros(env.num_envs, 2, device=env.device)
+
+
+def _height_samples_zeros(env) -> torch.Tensor:
+    """Placeholder height samples (11×11 grid) — zeros for Stage A flat ground. Shape: (N, 121)."""
+    return torch.zeros(env.num_envs, 121, device=env.device)
 
 LEG_JOINTS = aimdk_leg_order()
 
@@ -77,12 +88,17 @@ class ActionsCfg:
 class ObservationsCfg:
     @configclass
     class PolicyCfg(ObsGroup):
+        # Order MUST match OBSERVATION_LAYOUT in tasks/common/observations.py (168-dim contract).
+        velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
         projected_gravity = ObsTerm(func=mdp.projected_gravity, noise=Unoise(n_min=-0.05, n_max=0.05))
-        velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
         joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
         joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5))
         actions = ObsTerm(func=mdp.last_action)
+        # Stage A: gait phase and height samples are zeros (standing on flat ground).
+        # Replace with real clock/raycaster terms when the walking curriculum starts.
+        gait_phase = ObsTerm(func=_gait_phase_zeros)
+        height_samples = ObsTerm(func=_height_samples_zeros)
 
         def __post_init__(self):
             self.enable_corruption = True
@@ -154,7 +170,7 @@ class TerminationsCfg:
     base_contact = DoneTerm(
         func=mdp.illegal_contact,
         params={"sensor_cfg": SceneEntityCfg(
-            "contact_forces", body_names=["torso_link", "pelvis", "head_pitch_link"]),
+            "contact_forces", body_names=TERMINATION_BODY_NAMES),
             "threshold": 1.0})
 
 

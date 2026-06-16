@@ -30,8 +30,11 @@ def _repo_configs_dir() -> Path:
         candidate = parent / "configs"
         if candidate.is_dir():
             return candidate
-    # Fall back to repo-root guess: <repo>/ros2_ws/src/x2_common/x2_common/this.py
-    return here.parents[4] / "configs"
+    raise ConfigError(
+        "Cannot locate the configs/ directory. "
+        "Set the X2_CONFIG_DIR environment variable to its absolute path, "
+        "e.g. export X2_CONFIG_DIR=/path/to/terrain_recognition/configs"
+    )
 
 
 def config_path(name: str) -> Path:

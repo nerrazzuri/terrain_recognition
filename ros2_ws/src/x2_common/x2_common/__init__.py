@@ -7,6 +7,7 @@ time_sync) remain importable — and unit-testable — without a ROS2 install.
 
 __all__ = [
     "config_loader",
+    "joint_map",
     "logging_utils",
     "safety_limits",
     "time_sync",

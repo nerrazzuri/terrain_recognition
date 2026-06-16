@@ -19,6 +19,7 @@ from rclpy.node import Node
 
 from x2_terrain_msgs.msg import PolicyDebug
 from x2_common import config_loader
+from x2_common.joint_map import aimdk_leg_order
 from x2_common.qos_profiles import command_qos
 
 from .core import observation_builder as ob
@@ -33,7 +34,6 @@ class JointPolicyNode(Node):
         super().__init__("joint_policy_node")
         safety = config_loader.load_config("safety_limits")
         joint_limits = config_loader.load_config("joint_limits_x2_ultra")
-        from x2_locomotion.robots.x2_joint_map import aimdk_leg_order  # type: ignore
         order = aimdk_leg_order()
 
         self._approved = bool(safety["REAL_ROBOT_LOW_LEVEL_LEG_POLICY_APPROVED"])

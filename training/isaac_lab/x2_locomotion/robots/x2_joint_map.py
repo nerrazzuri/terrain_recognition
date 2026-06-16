@@ -14,8 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
-_PER_LEG = ["hip_pitch", "hip_roll", "hip_yaw", "knee", "ankle_pitch", "ankle_roll"]
-_JOINT_SUFFIX = "_joint"
+from x2_common.joint_map import aimdk_leg_order  # noqa: F401 — single source of truth
 
 # Full AimDK body joint order — VERIFIED against the robot MC param
 # (software/mc_param/robot/lx2501_3_t2d5/robot_model.yaml): legs(12) -> waist(3) -> head(2)
@@ -37,11 +36,6 @@ AIMDK_BODY_ORDER = [
 
 class JointMapError(RuntimeError):
     """Raised when the simulator joint set does not match the expected AimDK leg joints."""
-
-
-def aimdk_leg_order() -> list[str]:
-    """Canonical 12-DoF leg joint order (X2 URDF v1.3.0 names): left leg then right leg."""
-    return [f"{side}_{j}{_JOINT_SUFFIX}" for side in ("left", "right") for j in _PER_LEG]
 
 
 class JointMap:

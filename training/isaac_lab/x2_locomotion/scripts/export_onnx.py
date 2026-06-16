@@ -39,10 +39,25 @@ def export(checkpoint: str, out_path: str, num_test_vectors: int = 32) -> int:
         return 2
 
     # --- with torch present: ----------------------------------------------------------
-    #   1. build ActorCritic, load_state_dict(checkpoint)
-    #   2. torch.onnx.export(model, dummy_obs[1,168], out_path, input/output names)
-    #   3. run onnxruntime on random obs; compare to model.act(obs) via numeric_match(.,.,tol)
-    #   4. fail if any vector exceeds tol
+    # Stage A/B use rsl_rl's built-in MLP actor (RslRlPpoActorCriticCfg), NOT the custom
+    # ActorCritic from network.py.  The custom ActorCritic (height_encoder + proprio_encoder)
+    # is wired in from Stage E onwards when privileged observations are added.
+    #
+    # For Stage A/B checkpoints (model_final.pt saved by rsl_rl OnPolicyRunner):
+    #   1. Load checkpoint: ckpt = torch.load(checkpoint)
+    #   2. Instantiate runner actor: actor is an MLP with dims [OBS_DIM, 256, 256, 128, 12]
+    #      where OBS_DIM = 168 (observations.OBSERVATION_DIM).
+    #      from x2_locomotion.agents.rsl_rl_ppo_cfg import X2StandingPPORunnerCfg
+    #      policy_cfg = X2StandingPPORunnerCfg().policy
+    #      from rsl_rl.modules import ActorCritic as RslActorCritic
+    #      model = RslActorCritic(OBS_DIM, OBS_DIM, 12, policy_cfg)
+    #   3. model.load_state_dict(ckpt["model_state_dict"]); model.eval()
+    #   4. dummy_obs = torch.zeros(1, 168)  # OBS_DIM = observations.OBSERVATION_DIM
+    #   5. torch.onnx.export(model.actor, dummy_obs, out_path,
+    #                        input_names=["obs"], output_names=["action"],
+    #                        dynamic_axes={"obs": {0: "batch"}, "action": {0: "batch"}})
+    #   6. Run onnxruntime on random obs vectors; compare to model.actor(obs) via numeric_match
+    #   7. fail if any vector exceeds tol
     raise NotImplementedError("export + validate once torch/onnxruntime are installed")
 
 

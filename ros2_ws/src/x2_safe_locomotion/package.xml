@@ -16,6 +16,7 @@
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>x2_terrain_msgs</exec_depend>
   <exec_depend>x2_common</exec_depend>
+  <exec_depend>x2_terrain_perception</exec_depend>
 
   <test_depend>python3-pytest</test_depend>
 

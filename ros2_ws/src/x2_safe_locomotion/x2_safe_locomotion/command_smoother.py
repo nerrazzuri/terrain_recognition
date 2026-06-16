@@ -12,7 +12,7 @@ from geometry_msgs.msg import Twist
 from std_msgs.msg import Bool
 
 from x2_common import config_loader
-from x2_common.qos_profiles import command_qos
+from x2_common.qos_profiles import command_qos, latched_qos
 
 from .core.smoother import CommandSmoother
 
@@ -28,7 +28,7 @@ class CommandSmootherNode(Node):
         self._target = (0.0, 0.0)
         self._estop = False
         self.create_subscription(Twist, "/x2/safe_locomotion/raw_velocity", self._on_raw, 10)
-        self.create_subscription(Bool, "/x2/operator/estop", self._on_estop, command_qos())
+        self.create_subscription(Bool, "/x2/operator/estop", self._on_estop, latched_qos())
         self.pub = self.create_publisher(
             Twist, "/x2/safe_locomotion/smoothed_velocity", command_qos())
         self.create_timer(self._period, self._tick)
