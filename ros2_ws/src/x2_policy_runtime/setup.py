@@ -20,6 +20,7 @@ setup(
     entry_points={
         "console_scripts": [
             "joint_policy_node = x2_policy_runtime.joint_policy_node:main",
+            "cpgwalk_deploy = x2_policy_runtime.cpgwalk_deploy:main",
         ],
     },
 )
