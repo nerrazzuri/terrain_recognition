@@ -51,15 +51,25 @@ def export(checkpoint: str, out_path: str, num_test_vectors: int = 32) -> int:
         print(f"[export_onnx] BLOCKED: torch/onnxruntime/rsl_rl not available ({exc}).")
         return 2
 
-    obs_dim = OBSERVATION_DIM  # 168 — actor input width
-
-    # 1. Rebuild the rsl_rl actor-critic and load the trained weights.
-    actor_critic = ActorCritic(
-        num_actor_obs=obs_dim, num_critic_obs=obs_dim, num_actions=ACTION_DIM,
-        actor_hidden_dims=ACTOR_HIDDEN_DIMS, critic_hidden_dims=CRITIC_HIDDEN_DIMS,
-        activation=ACTIVATION)
+    # Infer dims straight from the checkpoint — the trained env's obs width is the source of
+    # truth (it may differ from observations.OBSERVATION_DIM if the obs terms changed; e.g. the
+    # Stage-B policy is 206-dim = joint_pos/vel over all 31 joints, vs the 168-dim contract).
     ckpt = torch.load(checkpoint, map_location="cpu")
     state = ckpt["model_state_dict"] if isinstance(ckpt, dict) and "model_state_dict" in ckpt else ckpt
+    obs_dim = int(state["actor.0.weight"].shape[1])
+    critic_obs_dim = int(state["critic.0.weight"].shape[1])
+    actor_layers = sorted(int(k.split(".")[1]) for k in state
+                          if k.startswith("actor.") and k.endswith(".weight"))
+    action_dim = int(state[f"actor.{actor_layers[-1]}.weight"].shape[0])
+    if obs_dim != OBSERVATION_DIM:
+        print(f"[export_onnx] NOTE: checkpoint obs_dim={obs_dim} != deployment contract "
+              f"OBSERVATION_DIM={OBSERVATION_DIM} — Phase 5 observation_builder must match {obs_dim}.")
+
+    # 1. Rebuild the rsl_rl actor-critic (dims from the checkpoint) and load the trained weights.
+    actor_critic = ActorCritic(
+        num_actor_obs=obs_dim, num_critic_obs=critic_obs_dim, num_actions=action_dim,
+        actor_hidden_dims=ACTOR_HIDDEN_DIMS, critic_hidden_dims=CRITIC_HIDDEN_DIMS,
+        activation=ACTIVATION)
     actor_critic.load_state_dict(state)
     actor_critic.eval()
     # nn.Sequential: obs -> mean action (empirical_normalization=False, so no normalizer layer)
@@ -72,7 +82,7 @@ def export(checkpoint: str, out_path: str, num_test_vectors: int = 32) -> int:
         input_names=["obs"], output_names=["action"],
         dynamic_axes={"obs": {0: "batch"}, "action": {0: "batch"}},
         opset_version=17)
-    print(f"[export_onnx] wrote {out_path} (obs_dim={obs_dim}, action_dim={ACTION_DIM})")
+    print(f"[export_onnx] wrote {out_path} (obs_dim={obs_dim}, action_dim={action_dim})")
 
     # 3. Validate ONNX vs PyTorch on random observations.
     sess = onnxruntime.InferenceSession(out_path, providers=["CPUExecutionProvider"])
