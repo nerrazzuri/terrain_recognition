@@ -28,8 +28,14 @@ GRADUATION_THRESHOLDS = {
 # Which graduation condition each curriculum task reports against.
 TASK_CONDITION = {"standing": "flat", "flat_walk": "flat", "rough": "rough", "stairs": "stairs_up"}
 
-# Default success gate: stayed upright the whole episode and tracked commanded vel within this.
-DEFAULT_MAX_VEL_ERROR_MPS = 0.3
+# Success classification thresholds. These distinguish *walking* from *standing*: at the low
+# command speeds used here (≤ ~1 m/s) a plain velocity-error gate is useless because a robot
+# standing still scores a small error against a small command. So a WALK command requires the
+# robot to actually MOVE (achieve a fraction of the commanded speed), while a STAND command
+# requires it to stay still.
+WALK_CMD_THRESHOLD_MPS = 0.1   # commanded planar speed above this => "walk" episode
+WALK_TRACK_FRACTION = 0.5      # walk success: achieved >= this * commanded speed
+STAND_SPEED_MAX_MPS = 0.15     # stand success: achieved planar speed stays below this
 
 
 def check_graduation(success_rates: dict[str, float]) -> tuple[bool, list[str]]:
@@ -46,29 +52,60 @@ def check_graduation(success_rates: dict[str, float]) -> tuple[bool, list[str]]:
 
 @dataclass(frozen=True)
 class EpisodeOutcome:
-    """One finished episode. ``survived`` = reached the time-out without falling."""
+    """One finished episode.
+
+    ``survived``       reached the episode time-out without falling.
+    ``cmd_speed``      mean commanded planar speed (m/s) over the episode.
+    ``achieved_speed`` mean achieved planar speed (m/s) over the episode.
+    """
 
     survived: bool
-    mean_vel_error: float          # mean |commanded - actual| planar velocity over the episode
+    cmd_speed: float
+    achieved_speed: float
 
 
-def episode_success(outcome: EpisodeOutcome,
-                    max_vel_error: float = DEFAULT_MAX_VEL_ERROR_MPS) -> bool:
-    """A locomotion episode succeeds iff it stayed upright AND tracked the command."""
-    return bool(outcome.survived and outcome.mean_vel_error <= max_vel_error)
+def is_walk_command(o: EpisodeOutcome) -> bool:
+    return o.cmd_speed > WALK_CMD_THRESHOLD_MPS
 
 
-def success_rate(outcomes: list[EpisodeOutcome],
-                 max_vel_error: float = DEFAULT_MAX_VEL_ERROR_MPS) -> float:
+def episode_success(o: EpisodeOutcome) -> bool:
+    """Walk episode: upright AND actually moving toward the command. Stand episode: upright AND
+    actually staying still. A standing robot under a walk command now correctly FAILS."""
+    if not o.survived:
+        return False
+    if is_walk_command(o):
+        return o.achieved_speed >= WALK_TRACK_FRACTION * o.cmd_speed
+    return o.achieved_speed <= STAND_SPEED_MAX_MPS
+
+
+def success_rate(outcomes: list[EpisodeOutcome]) -> float:
     """Fraction of episodes that count as a success. Empty -> 0.0 (fail closed)."""
     if not outcomes:
         return 0.0
-    return sum(episode_success(o, max_vel_error) for o in outcomes) / len(outcomes)
+    return sum(episode_success(o) for o in outcomes) / len(outcomes)
+
+
+def split_success_rates(outcomes: list[EpisodeOutcome]) -> dict[str, float]:
+    """Break results into walk vs stand so 'stands but never walks' can't hide in an aggregate."""
+    walk = [o for o in outcomes if is_walk_command(o)]
+    stand = [o for o in outcomes if not is_walk_command(o)]
+
+    def _rate(lst):
+        return sum(episode_success(o) for o in lst) / len(lst) if lst else float("nan")
+
+    return {
+        "overall": success_rate(outcomes),
+        "walk_success": _rate(walk),
+        "stand_success": _rate(stand),
+        "n_walk": len(walk),
+        "n_stand": len(stand),
+        "mean_walk_cmd_speed": sum(o.cmd_speed for o in walk) / len(walk) if walk else 0.0,
+        "mean_walk_achieved_speed": sum(o.achieved_speed for o in walk) / len(walk) if walk else 0.0,
+    }
 
 
 def run_rollouts(task: str, checkpoint: str, episodes: int, device: str,
-                 num_envs: int = 64, max_vel_error: float = DEFAULT_MAX_VEL_ERROR_MPS,
-                 condition: str = "flat") -> list[EpisodeOutcome]:
+                 num_envs: int = 64, condition: str = "flat") -> list[EpisodeOutcome]:
     """Headless rollout of the trained policy. Returns one EpisodeOutcome per finished episode.
 
     Lazily launches Isaac Sim so importing this module (for the pure-logic tests) is cheap.
@@ -112,7 +149,8 @@ def run_rollouts(task: str, checkpoint: str, episodes: int, device: str,
     if isinstance(obs, tuple):
         obs = obs[0]
 
-    err_sum = torch.zeros(num_envs, device=device)
+    cmd_sum = torch.zeros(num_envs, device=device)       # accumulated commanded planar speed
+    ach_sum = torch.zeros(num_envs, device=device)       # accumulated achieved planar speed
     steps = torch.zeros(num_envs, device=device)
     outcomes: list[EpisodeOutcome] = []
 
@@ -129,7 +167,8 @@ def run_rollouts(task: str, checkpoint: str, episodes: int, device: str,
 
         cmd = cmd_mgr.get_command("base_velocity")           # (N,3) lin_x, lin_y, ang_z
         actual = robot.data.root_lin_vel_b[:, :2]            # (N,2) planar body velocity
-        err_sum += torch.linalg.norm(cmd[:, :2] - actual, dim=-1)
+        cmd_sum += torch.linalg.norm(cmd[:, :2], dim=-1)     # commanded planar speed
+        ach_sum += torch.linalg.norm(actual, dim=-1)         # achieved planar speed
         steps += 1.0
 
         # time_outs (truncation) = survived to the time limit; a done without it = fell.
@@ -140,8 +179,10 @@ def run_rollouts(task: str, checkpoint: str, episodes: int, device: str,
             n = max(steps[i].item(), 1.0)
             outcomes.append(EpisodeOutcome(
                 survived=bool(time_out[i].item()),
-                mean_vel_error=float(err_sum[i].item() / n)))
-            err_sum[i] = 0.0
+                cmd_speed=float(cmd_sum[i].item() / n),
+                achieved_speed=float(ach_sum[i].item() / n)))
+            cmd_sum[i] = 0.0
+            ach_sum[i] = 0.0
             steps[i] = 0.0
         if len(outcomes) and len(outcomes) % 25 == 0:
             print(f"[evaluate]   {len(outcomes)}/{episodes} episodes...", flush=True)
@@ -149,14 +190,17 @@ def run_rollouts(task: str, checkpoint: str, episodes: int, device: str,
     outcomes = outcomes[:episodes]
     # Print the result BEFORE closing the sim app — simulation_app.close() can hard-exit the
     # process, so anything after it (incl. a print back in main) may never run.
-    rate = success_rate(outcomes, max_vel_error)
-    survived = sum(o.survived for o in outcomes)
-    passed, failures = check_graduation({condition: rate})
+    s = split_success_rates(outcomes)
     gate = GRADUATION_THRESHOLDS.get(condition)
-    verdict = "PASS" if not any(condition in f for f in failures) else "FAIL"
-    print(f"[evaluate] RESULT {condition}: success_rate={rate:.3f} over {len(outcomes)} episodes "
-          f"(survived {survived}; vel-err gate {max_vel_error} m/s) -> {verdict} (gate={gate})",
-          flush=True)
+    verdict = "PASS" if s["overall"] >= (gate or 0.0) else "FAIL"
+    print(f"[evaluate] RESULT {condition}: overall={s['overall']:.3f} -> {verdict} (gate={gate}) | "
+          f"WALK {s['walk_success']:.3f} (n={s['n_walk']}, "
+          f"cmd~{s['mean_walk_cmd_speed']:.2f} achieved~{s['mean_walk_achieved_speed']:.2f} m/s) | "
+          f"STAND {s['stand_success']:.3f} (n={s['n_stand']}) | "
+          f"survived {sum(o.survived for o in outcomes)}/{len(outcomes)}", flush=True)
+    if s["n_walk"] and s["mean_walk_achieved_speed"] < WALK_TRACK_FRACTION * s["mean_walk_cmd_speed"]:
+        print("[evaluate] WARNING: walk-commanded robots are barely moving — policy is standing, "
+              "not walking.", flush=True)
 
     env.close()
     simulation_app.close()
@@ -170,7 +214,6 @@ def main(argv=None) -> int:
     ap.add_argument("--episodes", type=int, default=200)
     ap.add_argument("--num_envs", type=int, default=64)
     ap.add_argument("--device", default="cuda:0")
-    ap.add_argument("--max_vel_error", type=float, default=DEFAULT_MAX_VEL_ERROR_MPS)
     args = ap.parse_args(argv)
 
     print(f"[evaluate] task={args.task} checkpoint={args.checkpoint} episodes={args.episodes}")
@@ -185,7 +228,7 @@ def main(argv=None) -> int:
     # condition this task covers; run each task to complete the full gate.
     condition = TASK_CONDITION.get(args.task, args.task)
     run_rollouts(args.task, args.checkpoint, args.episodes,
-                 args.device, args.num_envs, args.max_vel_error, condition)
+                 args.device, args.num_envs, condition)
     return 0
 
 

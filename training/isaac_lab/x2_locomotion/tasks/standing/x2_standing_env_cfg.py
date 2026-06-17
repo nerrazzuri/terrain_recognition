@@ -137,10 +137,14 @@ class RewardsCfg:
     """
 
     # --- task: track the commanded base velocity ---
+    # std tightened 0.5 -> 0.25 so velocity error actually bites: at std=0.5 a robot standing
+    # still scored ~exp(-cmd^2/0.5^2) ~ 0.9 of this reward for small commands, letting the
+    # policy "succeed" by standing (Stage B walked nowhere on video). With 0.25 + Stage-B's
+    # 0.3-0.8 m/s commands, standing scores near zero, so it must actually move.
     track_lin_vel_xy = RewTerm(func=mdp.track_lin_vel_xy_exp, weight=1.0,
-                               params={"command_name": "base_velocity", "std": 0.5})
+                               params={"command_name": "base_velocity", "std": 0.25})
     track_ang_vel_z = RewTerm(func=mdp.track_ang_vel_z_exp, weight=0.5,
-                              params={"command_name": "base_velocity", "std": 0.5})
+                              params={"command_name": "base_velocity", "std": 0.25})
     # --- posture / stability ---
     flat_orientation = RewTerm(func=mdp.flat_orientation_l2, weight=-2.5)
     base_height = RewTerm(func=mdp.base_height_l2, weight=-1.0,

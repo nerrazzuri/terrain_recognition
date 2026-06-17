@@ -2,7 +2,7 @@
 
 **Plan source of truth:** [x2_terrain_stair_climbing_roadmap.md](x2_terrain_stair_climbing_roadmap.md)
 **This file:** living checklist of every module and task. Update each task's status box as work progresses.
-**Last updated:** 2026-06-17 — Stage A + Stage B RL policies trained on vast.ai L40S (Isaac Lab 2.1 / Isaac Sim 4.5); Stage B keeper `model_1050.pt` walks (vel-track 0.87, falls ~0.08). Module 4.4 eval + ONNX export implemented (`evaluate_policy.py`, `export_onnx.py`); flat_walk iters capped to 1500 after a late-training collapse. Reproducible GPU install in `tools/setup_local_isaac.sh`. Pure-logic unit tests pass. Sim/hardware items [~]/[!] with blockers.
+**Last updated:** 2026-06-17 — Module 4.4 eval + ONNX export run on a cloud L40S: `model_1050.pt` exports to `policy.onnx` (ONNX==PyTorch ✓). **Video review caught that Stage B only STANDS** (the old eval's velocity-error gate let standing pass at tiny commands). Fixed: commands 0.3–0.8 m/s, standing mix 20%→10%, tracking std 0.5→0.25; eval rewritten to require achieved≥0.5×commanded speed + walk/stand split. **Stage B retrain pending** with these fixes. Trained obs is 206-dim (all 31 joints) vs 168-dim deployment contract — reconcile before Phase 5. Reproducible GPU install in `tools/setup_local_isaac.sh`.
 
 ---
 
@@ -37,10 +37,10 @@
 | P1 — Terrain Awareness | Low | No | 4 | 17 | 15 | Code done (2 blocked on hardware bags) |
 | P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 9 | Pipeline validated live (dry-run); on-robot blocked |
 | P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 6 | Model validated in MuJoCo; Isaac Lab path pending |
-| P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 9 | Stage A+B trained (L40S); eval+ONNX export implemented; stairs curriculum next |
+| P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 8 | Stage A trained; Stage B stands-not-walks (reward/eval fixed, retrain pending); eval+ONNX export run on cloud |
 | P5 — Sim-to-Real Deployment | **High** | Trained | 3 | 14 | 6 | Runtime logic done; hardware gated/blocked |
 | P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 1 | Architecture scaffolded; training blocked |
-| **Total** | | | **24** | **89** | **51** | |
+| **Total** | | | **24** | **89** | **50** | |
 
 **Current focus:** Phase 4 RL training on **Isaac Lab 2.1 / Isaac Sim 4.5 via cloud GPU** (vast.ai L40S 48 GB; reproducible install in `tools/setup_local_isaac.sh`). **Stage A standing + Stage B flat-walk TRAINED** — Stage B keeper is `models/x2_flat_walk_v1/model_1050.pt` (peak: reward 16.9, vel-track 0.87, falls ~0.08; later iters collapsed, so iters capped to 1500). **Module 4.4 eval+export implemented** (`evaluate_policy.py` rollout success-rates; `export_onnx.py` actor→ONNX + numeric check) — run both on the next GPU session to validate Stage B and produce `policy.onnx` for Phase 5. **Next:** run eval/export, then extend the curriculum (Stage C rough → D step → E stairs-up). P0–P2 software complete + sim-validated; P1/P2 hardware items blocked on the robot.
 
@@ -168,7 +168,7 @@
 
 ## Module 4.3 — Curriculum Tasks
 - `[~]` **P4-M3-T1** Stage A — standing (`x2_standing_env_cfg.py`): stand 30 s, recover small pushes. ***Trained & converged** (1500 iters, L40S, ~40k steps/s): X2 stays upright the full 20 s episode in ~93% of cases (`bad_orientation` 1.0→0.05), survives periodic pushes, mean reward +3. **Caveat:** drifts/yaws while upright (no planar-velocity penalty yet) — adding velocity-command tracking next for a planted stand + Stage-B walking.*
-- `[x]` **P4-M3-T2** Stage B — flat walking (`x2_flat_walk_env_cfg.py`): fwd 0–0.3 m/s, yaw ±0.3 rad/s. ***Trained on vast.ai L40S** (Isaac Lab 2.1 / Isaac Sim 4.5, 168-dim obs): velocity tracking + hip-deviation (anti-splay) + ~20% standing-env mix → one policy stands planted AND walks. Peaked at iter ~1050 (mean reward 16.9, vel-track 0.87, falls ~0.08, episodes ~990/1000 = walks upright + tracks command). **Late-training collapse** (reward→2.2, falls→0.83 by iter 3000), so the keeper is `models/x2_flat_walk_v1/model_1050.pt` (peak checkpoints 1000–1500 + final preserved); `max_iterations` capped to 1500 for the next run. Local GUI view blocked by an Optimus-laptop PhysX hang — view on cloud or via eval metrics.*
+- `[~]` **P4-M3-T2** Stage B — flat walking (`x2_flat_walk_env_cfg.py`). **First run STANDS, does not walk — needs retrain.** Trained on vast.ai L40S (Isaac Lab 2.1 / Isaac Sim 4.5, 206-dim obs); `model_1050.pt` exported to `policy.onnx` (ONNX==PyTorch ✓) and scored 97% on the *old* eval — but **video review showed it just stands**. Root cause: commands were tiny (0–0.3 m/s) vs reward std 0.5 and the eval's 0.3 m/s error gate, so standing still scored ~90% of the velocity reward / passed "tracking" → the policy gamed it by not moving. **Fixes applied (await retrain):** commands 0.3–0.8 m/s, standing-env mix 20%→10%, tracking std 0.5→0.25; eval rewritten to require *achieved* speed ≥ 0.5×commanded and to report walk vs stand separately. `model_1050.pt`/`policy.onnx` kept as a reference standing policy. **NOTE:** trained obs is 206-dim (joint_pos/vel over all 31 joints), not the 168-dim deployment contract — reconcile before Phase 5.
 - `[~]` **P4-M3-T3** Stage C — rough terrain (`x2_rough_env_cfg.py`): 1–5 cm noise, mild slopes. *Scaffolded; blocked.*
 - `[~]` **P4-M3-T4** Stage D — single step / curb: 2→5→8→12→15 cm. *In `x2_stairs_env_cfg` + terrain_spec level 3; blocked.*
 - `[~]` **P4-M3-T5** Stage E — stairs up (`x2_stairs_env_cfg.py`): rise 5–18 cm, tread 24–35 cm, 1–8 steps. *Scaffolded (terrain_spec level 4); blocked.*
