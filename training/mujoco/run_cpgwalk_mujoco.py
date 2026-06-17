@@ -29,8 +29,9 @@ sys.path.insert(0, str(REPO / "training" / "isaac_lab"))
 from x2_locomotion.cref import factory_cpgwalk as fc  # noqa: E402
 
 MODEL = REPO / "training" / "mujoco" / "model" / "scene.xml"
-# default ONNX location in the unzipped 0.8 robot runtime (not committed — large binary)
-DEFAULT_ONNX = ("/home/liang/Projects/X2 Locomotion/0.8/agibot/software/"
+# default ONNX = the 0.9.7 robot runtime (all robots are 0.9). cpgwalkrun_v25_v2.onnx is
+# byte-identical to the 0.8 file, but we point at 0.9.7 so all dev follows the 0.9 line.
+DEFAULT_ONNX = ("/home/liang/Projects/X2 Locomotion/0.9.7/agibot/software/"
                 "mc_param/robot/lx2501_3_t2d5/rl_models/cpgwalkrun_v25_v2.onnx")
 
 
@@ -54,12 +55,16 @@ def main(argv=None) -> int:
     ap.add_argument("--settle", type=float, default=1.0, help="hold default pose before commanding")
     ap.add_argument("--ramp", type=float, default=1.0, help="seconds to ramp command 0->target")
     ap.add_argument("--view", action="store_true")
+    ap.add_argument("--video", default=None, help="write an MP4 of the run to this path (headless, EGL)")
     args = ap.parse_args(argv)
 
     if not pathlib.Path(args.onnx).exists():
         print(f"[err] ONNX not found: {args.onnx}\n      pass --onnx <path to cpgwalkrun_v25_v2.onnx>")
         return 2
 
+    if args.video:
+        import os
+        os.environ.setdefault("MUJOCO_GL", "egl")   # offscreen render
     import mujoco
 
     model = mujoco.MjModel.from_xml_path(str(MODEL))
@@ -103,6 +108,17 @@ def main(argv=None) -> int:
         action = pol.infer(obs)
         targets = fc.action_to_targets(action)
 
+    # optional offscreen video recorder (camera follows the pelvis)
+    renderer = cam = frames = None
+    render_every = fps = None
+    if args.video:
+        renderer = mujoco.Renderer(model, 480, 640)
+        cam = mujoco.MjvCamera()
+        cam.azimuth, cam.elevation, cam.distance = 120, -15, 3.2
+        frames = []
+        fps = 25
+        render_every = max(1, round((1.0 / fps) / fc.CONTROL_DT))
+
     def run_loop(viewer=None):
         n_ctrl = int(args.seconds / fc.CONTROL_DT)
         min_h, fell = 1e9, None
@@ -127,6 +143,10 @@ def main(argv=None) -> int:
                 fell = t
             if viewer is not None:
                 viewer.sync()
+            if renderer is not None and k % render_every == 0:
+                cam.lookat = data.qpos[base_qadr:base_qadr + 3]      # track the robot
+                renderer.update_scene(data, camera=cam)
+                frames.append(renderer.render().copy())
         dx = float(data.qpos[base_qadr]) - (walk_x0 if walk_x0 is not None else 0.0)
         dt_walk = (n_ctrl * fc.CONTROL_DT) - (walk_t0 or 0.0)
         return min_h, fell, dx, (dx / dt_walk if dt_walk > 0 else 0.0)
@@ -148,6 +168,13 @@ def main(argv=None) -> int:
           + (f" | fell at t={fell:.1f}s" if fell else ""))
     print("  height ~0.65=standing, <0.35=fallen. WALKED => our loop reproduces the factory gait; "
           "if STAYED UP but vx~0, the command/4th-dim or CPG clock needs the rl/debug ground truth.")
+
+    if frames:
+        import imageio.v2 as imageio
+        imageio.mimsave(args.video, frames, fps=fps, macro_block_size=None)
+        print(f"[video] wrote {len(frames)} frames -> {args.video}")
+        import os
+        os._exit(0 if (walked or (upright and args.vx == 0)) else 1)  # skip noisy EGL cleanup
     return 0 if (walked or (upright and args.vx == 0)) else 1
 
 
