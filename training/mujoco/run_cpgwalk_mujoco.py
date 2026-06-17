@@ -52,7 +52,8 @@ def main(argv=None) -> int:
     ap.add_argument("--yaw", type=float, default=0.0)
     ap.add_argument("--cmd4", type=float, default=0.0, help="4th command dim (gait/mode flag — confirm via rl/debug)")
     ap.add_argument("--seconds", type=float, default=8.0)
-    ap.add_argument("--settle", type=float, default=1.0, help="hold default pose before commanding")
+    ap.add_argument("--settle", type=float, default=0.5,
+                    help="balance-in-place warmup (policy ON, zero command) before ramping command")
     ap.add_argument("--ramp", type=float, default=1.0, help="seconds to ramp command 0->target")
     ap.add_argument("--view", action="store_true")
     ap.add_argument("--video", default=None, help="write an MP4 of the run to this path (headless, EGL)")
@@ -82,9 +83,12 @@ def main(argv=None) -> int:
     ctrlrange = model.actuator_ctrlrange[cadr]            # software-PD torque clamp
     kps, kds = fc.KPS, fc.KDS
 
-    # init at the factory default standing pose
+    # init at the factory default standing pose, spawned near standing equilibrium height
+    # (model nominal pelvis is 0.68 m but the default pose settles to ~0.64 m — spawn close to
+    # avoid a cosmetic drop transient at t=0)
     mujoco.mj_resetData(model, data)
     data.qpos[qadr] = fc.DEFAULT_DOF_POS
+    data.qpos[model.joint("floating_base_joint").qposadr[0] + 2] = 0.655
     mujoco.mj_forward(model, data)
 
     pol = fc.FactoryCpgwalkPolicy(args.onnx)
@@ -125,15 +129,12 @@ def main(argv=None) -> int:
         x0 = walk_t0 = walk_x0 = None
         for k in range(n_ctrl):
             t = k * fc.CONTROL_DT
-            if t < args.settle:
-                cmd_scale = 0.0
-                targets[:] = fc.DEFAULT_DOF_POS                       # hold pose to settle
-                fc.cpg_phase(t)
-            else:
-                cmd_scale = min(1.0, (t - args.settle) / max(args.ramp, 1e-6))
-                step_policy(t - args.settle, cmd_scale)
-                if walk_t0 is None:                                  # mark start of commanded walk
-                    walk_t0, walk_x0 = t, float(data.qpos[base_qadr])
+            # policy runs (balances) from t=0; command stays 0 during warmup then ramps in —
+            # so the robot is NEVER in an unbalanced stiff hold (no fake near-fall).
+            cmd_scale = 0.0 if t < args.settle else min(1.0, (t - args.settle) / max(args.ramp, 1e-6))
+            step_policy(t, cmd_scale)
+            if cmd_scale > 0 and walk_t0 is None:                    # mark start of commanded walk
+                walk_t0, walk_x0 = t, float(data.qpos[base_qadr])
             for _ in range(substeps):
                 apply_pd()
                 mujoco.mj_step(model, data)
