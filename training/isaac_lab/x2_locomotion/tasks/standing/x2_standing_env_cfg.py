@@ -150,7 +150,9 @@ class RewardsCfg:
     base_height = RewTerm(func=mdp.base_height_l2, weight=-1.0,
                           params={"target_height": BASE_HEIGHT_M})
     lin_vel_z = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
-    ang_vel_xy = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+    # roll/pitch-sway penalty bumped -0.05 -> -0.15 for a firmer, less-wobbly stance. This is
+    # roll/pitch only (NOT the commanded yaw, ang_vel_z), so it doesn't fight walking/turning.
+    ang_vel_xy = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.15)
     # keep a natural, narrow stance (anti-splay)
     hip_deviation = RewTerm(func=mdp.joint_deviation_l1, weight=-0.5,
                             params={"asset_cfg": SceneEntityCfg(
@@ -160,8 +162,10 @@ class RewardsCfg:
     # walking works. Velocity tracking already drives forward motion.
     # --- effort / smoothness ---
     dof_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2.0e-5)
-    dof_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
-    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
+    # smoothness bumped (dof_acc -2.5e-7 -> -5e-7, action_rate -0.01 -> -0.02) to damp the
+    # micro-jitter/tremor in the stance; kept small so it doesn't suppress walking leg motion.
+    dof_acc = RewTerm(func=mdp.joint_acc_l2, weight=-5.0e-7)
+    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
     dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-1.0)
     # --- fall penalty ---
     terminating = RewTerm(func=mdp.is_terminated, weight=-200.0)
