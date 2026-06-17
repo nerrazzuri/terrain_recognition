@@ -10,8 +10,8 @@ def test_obs_dims_and_layout():
         dof_pos=fc.DEFAULT_DOF_POS, dof_vel=np.zeros(17), prev_action=np.zeros(17),
         cpg_q=[0, 1, 0, -1])
     assert obs.shape == (fc.OBS_DIM,)
-    # dof_pos at default -> the pos block is exactly zero
-    assert np.allclose(obs[fc.SL_POS], 0.0)
+    # dof_pos at default -> the pos block is ~zero (float32 rounding)
+    assert np.allclose(obs[fc.SL_POS], 0.0, atol=1e-6)
     # command forward scaled by lin_vel (2.0)
     assert np.isclose(obs[6], 0.5 * fc.S_LIN_VEL)
     # cpg phase passes through unscaled
