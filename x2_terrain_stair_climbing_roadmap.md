@@ -31,6 +31,32 @@ Do **not** attempt direct real-stair climbing before simulation and safety valid
 
 ---
 
+## 0.1 Strategy Revision — 2026-06-17 (SUPERSEDES the from-scratch-walking assumption)
+
+After inspecting the actual robot runtime (`mc_param/robot/lx2501_3_t2d5/`) and the AimDK SDK (`lx2501_3-v0.9.0.4`), the locomotion strategy is revised. **This section wins over any older text that implies we must train flat walking ourselves.**
+
+**What the robot already ships (factory Motion Controller):**
+- A **production RL policy library**, CPG-based, switched internally by the MC: `cpgwalk` (walk/run), `cpgstep` (blind step robustness), `cpgtelecon` (teleop), plus many preset motions (jump, getup, dance…). Models are ONNX in `rl_models/`, registered via `rl/*_config.yaml`, `action_setting.yaml`, `motion_list.yaml`.
+- **Every factory policy is blind / proprioceptive** (≈65-obs: joint state + IMU + velocity command + gait params; 17-DoF action = legs+waist+shoulders; `frame_stack 10`). **No policy takes terrain/height/scan/depth input.**
+- Control surface (SDK `topics_and_services`): velocity walking `/aima/mc/locomotion/velocity`; mode switch `SetMcAction` (`PASSIVE/DAMPING/JOINT_DEFAULT/STAND_DEFAULT/LOCOMOTION_DEFAULT`); **low-level `/aima/hal/joint/*/command`**; preset motions `SetMcPresetMotion`; perception `rgbd depth`/`depth_pointcloud`/`lidar`.
+
+**Implications:**
+1. **Flat standing + walking = use the factory `cpgwalk` (velocity API). Do NOT train it ourselves.** Our from-scratch RL flat-walking runs (v1 stood, v2 crept, v3 finally walked but with a *limping* gait) confirmed this is both redundant and inferior to the factory's natural gait. v3 is retained only as **toolchain validation** (it proved the sim→RL→eval→video→ONNX pipeline produces real locomotion).
+2. **The project's unique value is perception-aware stair climbing** — the one thing nothing in the factory stack can do, because all factory policies are blind.
+3. **Integration architecture (the deployable design):**
+   ```
+   factory cpgwalk (velocity API)  →  flat walk / approach        [blind, production, natural gait]
+   our perception (height map, Phase 1)  →  detect + align + stop at stair base
+   SetMcAction → JOINT  →  OUR terrain-aware stair policy          [height map → /aima/hal/joint/*/command, 50 Hz]
+   SetMcAction → LOCOMOTION  →  resume factory cpgwalk at the top
+   ```
+   The MC is a **closed binary that only feeds proprioceptive obs to its policies**, so a perception-aware policy **cannot** be config-added inside it — it must run **externally in JOINT mode** (this is why Phase 5's gated joint-command path is the integration point, not an MC config edit).
+4. **Warm-start the stair policy by DISTILLING the factory `cpgwalk.onnx`** (behavior-clone its mature gait as the base), then **add the height-map input** and fine-tune for stairs in sim. Match the robot's **17-DoF joint contract** (order from `cpgstep_config.yaml`) so outputs map 1:1 to `/aima/hal/joint/*/command` and the cpgwalk↔stair handoff is seamless. This replaces "train a height-map locomotion policy from scratch" as the Phase 4 plan.
+
+**Per-phase effect:** Phases 1–2 unchanged (perceive + safe factory-velocity walking + stop before stairs = the shippable base). Phase 3 sim model: validated. **Phase 4 re-scoped**: distill factory `cpgwalk` + train terrain-aware *stair* behavior (not a from-scratch flat→stairs curriculum). Phase 5: deploy the stair policy via JOINT-mode mode-switch (gated). Phase 6 (CReF raw-depth): still the advanced perception upgrade.
+
+---
+
 ## 1. Core Constraints and Assumptions
 
 ### 1.1 Hard safety constraints
