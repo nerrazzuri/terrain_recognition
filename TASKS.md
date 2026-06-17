@@ -2,7 +2,7 @@
 
 **Plan source of truth:** [x2_terrain_stair_climbing_roadmap.md](x2_terrain_stair_climbing_roadmap.md)
 **This file:** living checklist of every module and task. Update each task's status box as work progresses.
-**Last updated:** 2026-06-17 — Module 4.4 eval + ONNX export run on a cloud L40S: `model_1050.pt` exports to `policy.onnx` (ONNX==PyTorch ✓). **Video review caught that Stage B only STANDS** (the old eval's velocity-error gate let standing pass at tiny commands). Fixed: commands 0.3–0.8 m/s, standing mix 20%→10%, tracking std 0.5→0.25; eval rewritten to require achieved≥0.5×commanded speed + walk/stand split. **Stage B retrain pending** with these fixes. Trained obs is 206-dim (all 31 joints) vs 168-dim deployment contract — reconcile before Phase 5. Reproducible GPU install in `tools/setup_local_isaac.sh`.
+**Last updated:** 2026-06-17 — Stage B walking is the active problem. v1 (model_1050) STOOD not walked (eval gate was fooled by tiny commands — now fixed: eval requires achieved≥0.5×commanded + walk/stand split). v2 retrain (commands 0.3–0.8, std 0.25, stronger penalties, **no gait reward**) also failed: WALK 1%, creeps ~0.24 m/s, 42% survive — over-constrained + missing a stepping signal. **v3 (ready, retrain pending):** ported the proven Isaac Lab biped recipe (Unitree H1/G1) into our env — added **`feet_air_time_positive_biped` gait reward**, reverted std→0.5 and penalties to standard, command range 0–1.0 m/s. `feet_air_time` is the key missing ingredient. Trained obs is 206-dim vs 168-dim contract — reconcile before Phase 5. GPU install scripted in `tools/setup_local_isaac.sh`.
 
 ---
 

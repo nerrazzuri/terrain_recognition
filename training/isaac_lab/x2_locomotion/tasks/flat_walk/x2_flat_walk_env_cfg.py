@@ -23,7 +23,10 @@ class X2FlatWalkEnvCfg(X2StandingEnvCfg):
         super().__post_init__()
         self.episode_length_s = 20.0
         cmd = self.commands.base_velocity
-        cmd.rel_standing_envs = 0.1          # only ~10% command "stand still" — must learn to walk
+        cmd.rel_standing_envs = 0.1          # ~10% stand; the rest get a full 0–1.0 m/s spread
         cmd.resampling_time_range = (5.0, 10.0)
+        # Standard biped velocity range: include low speeds (from 0) so easy commands exist to
+        # bootstrap stepping, up to 1.0 m/s. Paired with the feet_air_time gait reward, this is
+        # the Unitree H1/G1 walking recipe (vs the v2 run's 0.3–0.8 with no gait reward).
         cmd.ranges = mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.3, 0.8), lin_vel_y=(0.0, 0.0), ang_vel_z=(-0.5, 0.5))
+            lin_vel_x=(0.0, 1.0), lin_vel_y=(0.0, 0.0), ang_vel_z=(-1.0, 1.0))

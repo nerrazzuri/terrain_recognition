@@ -29,8 +29,13 @@ from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
-from ...robots.x2_robot_cfg import build_robot_cfg, BASE_HEIGHT_M, TERMINATION_BODY_NAMES
+from ...robots.x2_robot_cfg import build_robot_cfg, BASE_HEIGHT_M, TERMINATION_BODY_NAMES, FEET_BODY_NAMES
 from ...robots.x2_joint_map import aimdk_leg_order
+
+# feet_air_time gait reward — the standard biped-walking ingredient (what Unitree H1/G1 use).
+# It lives in the locomotion velocity task mdp, not core isaaclab.envs.mdp. Without a stepping
+# reward, velocity tracking alone won't induce a gait (the v1/v2 runs just stood/crept).
+from isaaclab_tasks.manager_based.locomotion.velocity.mdp import feet_air_time_positive_biped
 
 
 def _gait_phase_zeros(env) -> torch.Tensor:
@@ -136,36 +141,33 @@ class RewardsCfg:
     keeps feet under the hips.
     """
 
+    # Weights follow the proven Isaac Lab biped velocity-walking recipe (Unitree H1/G1), with
+    # std back to the standard 0.5 (the v2 run's 0.25 + stronger penalties over-constrained it).
     # --- task: track the commanded base velocity ---
-    # std tightened 0.5 -> 0.25 so velocity error actually bites: at std=0.5 a robot standing
-    # still scored ~exp(-cmd^2/0.5^2) ~ 0.9 of this reward for small commands, letting the
-    # policy "succeed" by standing (Stage B walked nowhere on video). With 0.25 + Stage-B's
-    # 0.3-0.8 m/s commands, standing scores near zero, so it must actually move.
     track_lin_vel_xy = RewTerm(func=mdp.track_lin_vel_xy_exp, weight=1.0,
-                               params={"command_name": "base_velocity", "std": 0.25})
+                               params={"command_name": "base_velocity", "std": 0.5})
     track_ang_vel_z = RewTerm(func=mdp.track_ang_vel_z_exp, weight=0.5,
-                              params={"command_name": "base_velocity", "std": 0.25})
-    # --- posture / stability ---
-    flat_orientation = RewTerm(func=mdp.flat_orientation_l2, weight=-2.5)
+                              params={"command_name": "base_velocity", "std": 0.5})
+    # --- gait: THE missing ingredient — reward single-foot-stance air time (induces stepping).
+    # Command-gated, so it only rewards stepping when actually told to move (≈0 when standing).
+    feet_air_time = RewTerm(
+        func=feet_air_time_positive_biped, weight=0.5,
+        params={"command_name": "base_velocity", "threshold": 0.4,
+                "sensor_cfg": SceneEntityCfg("contact_forces", body_names=FEET_BODY_NAMES)})
+    # --- posture / stability (standard weights) ---
+    flat_orientation = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
     base_height = RewTerm(func=mdp.base_height_l2, weight=-1.0,
                           params={"target_height": BASE_HEIGHT_M})
     lin_vel_z = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
-    # roll/pitch-sway penalty bumped -0.05 -> -0.15 for a firmer, less-wobbly stance. This is
-    # roll/pitch only (NOT the commanded yaw, ang_vel_z), so it doesn't fight walking/turning.
-    ang_vel_xy = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.15)
+    ang_vel_xy = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     # keep a natural, narrow stance (anti-splay)
     hip_deviation = RewTerm(func=mdp.joint_deviation_l1, weight=-0.5,
                             params={"asset_cfg": SceneEntityCfg(
                                 "robot", joint_names=[".*_hip_yaw_joint", ".*_hip_roll_joint"])})
-    # NOTE: a feet_air_time stepping reward (encourages clean steps) lives in the locomotion
-    # task mdp (isaaclab_tasks...velocity.mdp), not core isaaclab.envs.mdp — add it once base
-    # walking works. Velocity tracking already drives forward motion.
-    # --- effort / smoothness ---
-    dof_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2.0e-5)
-    # smoothness bumped (dof_acc -2.5e-7 -> -5e-7, action_rate -0.01 -> -0.02) to damp the
-    # micro-jitter/tremor in the stance; kept small so it doesn't suppress walking leg motion.
-    dof_acc = RewTerm(func=mdp.joint_acc_l2, weight=-5.0e-7)
-    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
+    # --- effort / smoothness (standard, light enough not to suppress leg motion) ---
+    dof_torques = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-5)
+    dof_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
     dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-1.0)
     # --- fall penalty ---
     terminating = RewTerm(func=mdp.is_terminated, weight=-200.0)
