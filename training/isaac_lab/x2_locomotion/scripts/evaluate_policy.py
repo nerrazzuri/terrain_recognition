@@ -67,7 +67,8 @@ def success_rate(outcomes: list[EpisodeOutcome],
 
 
 def run_rollouts(task: str, checkpoint: str, episodes: int, device: str,
-                 num_envs: int = 64) -> list[EpisodeOutcome]:
+                 num_envs: int = 64, max_vel_error: float = DEFAULT_MAX_VEL_ERROR_MPS,
+                 condition: str = "flat") -> list[EpisodeOutcome]:
     """Headless rollout of the trained policy. Returns one EpisodeOutcome per finished episode.
 
     Lazily launches Isaac Sim so importing this module (for the pure-logic tests) is cheap.
@@ -115,33 +116,51 @@ def run_rollouts(task: str, checkpoint: str, episodes: int, device: str,
     steps = torch.zeros(num_envs, device=device)
     outcomes: list[EpisodeOutcome] = []
 
-    while len(outcomes) < episodes and simulation_app.is_running():
+    # Step budget guards against an env that never terminates (≈1200 policy steps/episode).
+    max_steps = max(episodes // max(num_envs, 1) + 2, 4) * 1500
+    print(f"[evaluate] rolling out (target {episodes} episodes, {num_envs} envs, "
+          f"budget {max_steps} steps)...", flush=True)
+    step = 0
+    while len(outcomes) < episodes and step < max_steps:
         with torch.inference_mode():
             actions = policy(obs)
             obs, _, dones, extras = env.step(actions)
+        step += 1
 
-            cmd = cmd_mgr.get_command("base_velocity")           # (N,3) lin_x, lin_y, ang_z
-            actual = robot.data.root_lin_vel_b[:, :2]            # (N,2) planar body velocity
-            err = torch.linalg.norm(cmd[:, :2] - actual, dim=-1)
-            err_sum += err
-            steps += 1.0
+        cmd = cmd_mgr.get_command("base_velocity")           # (N,3) lin_x, lin_y, ang_z
+        actual = robot.data.root_lin_vel_b[:, :2]            # (N,2) planar body velocity
+        err_sum += torch.linalg.norm(cmd[:, :2] - actual, dim=-1)
+        steps += 1.0
 
-            # time_outs (truncation) = survived; a done without time_out = fell.
-            time_out = extras.get("time_outs")
-            if time_out is None:
-                time_out = torch.zeros_like(dones, dtype=torch.bool)
-            done_idx = torch.nonzero(dones, as_tuple=False).flatten()
-            for i in done_idx.tolist():
-                n = max(steps[i].item(), 1.0)
-                outcomes.append(EpisodeOutcome(
-                    survived=bool(time_out[i].item()),
-                    mean_vel_error=float(err_sum[i].item() / n)))
-                err_sum[i] = 0.0
-                steps[i] = 0.0
+        # time_outs (truncation) = survived to the time limit; a done without it = fell.
+        time_out = extras.get("time_outs") if isinstance(extras, dict) else None
+        if time_out is None:
+            time_out = torch.zeros_like(dones, dtype=torch.bool)
+        for i in torch.nonzero(dones, as_tuple=False).flatten().tolist():
+            n = max(steps[i].item(), 1.0)
+            outcomes.append(EpisodeOutcome(
+                survived=bool(time_out[i].item()),
+                mean_vel_error=float(err_sum[i].item() / n)))
+            err_sum[i] = 0.0
+            steps[i] = 0.0
+        if len(outcomes) and len(outcomes) % 25 == 0:
+            print(f"[evaluate]   {len(outcomes)}/{episodes} episodes...", flush=True)
+
+    outcomes = outcomes[:episodes]
+    # Print the result BEFORE closing the sim app — simulation_app.close() can hard-exit the
+    # process, so anything after it (incl. a print back in main) may never run.
+    rate = success_rate(outcomes, max_vel_error)
+    survived = sum(o.survived for o in outcomes)
+    passed, failures = check_graduation({condition: rate})
+    gate = GRADUATION_THRESHOLDS.get(condition)
+    verdict = "PASS" if not any(condition in f for f in failures) else "FAIL"
+    print(f"[evaluate] RESULT {condition}: success_rate={rate:.3f} over {len(outcomes)} episodes "
+          f"(survived {survived}; vel-err gate {max_vel_error} m/s) -> {verdict} (gate={gate})",
+          flush=True)
 
     env.close()
     simulation_app.close()
-    return outcomes[:episodes]
+    return outcomes
 
 
 def main(argv=None) -> int:
@@ -161,20 +180,12 @@ def main(argv=None) -> int:
         print(f"[evaluate] BLOCKED: Isaac Lab not available ({exc}).")
         return 2
 
-    outcomes = run_rollouts(args.task, args.checkpoint, args.episodes,
-                            args.device, args.num_envs)
-    rate = success_rate(outcomes, args.max_vel_error)
-    condition = TASK_CONDITION.get(args.task, args.task)
-    survived = sum(o.survived for o in outcomes)
-    print(f"[evaluate] {condition}: success_rate={rate:.3f} "
-          f"(survived {survived}/{len(outcomes)}; vel-err gate {args.max_vel_error} m/s)")
-
-    # Single-task gate check: graduation spans every terrain, so this only fills the one
+    # run_rollouts prints the RESULT line itself (before it closes the sim app, which can
+    # hard-exit the process). Graduation spans every terrain — this only fills the one
     # condition this task covers; run each task to complete the full gate.
-    passed, failures = check_graduation({condition: rate})
-    print(f"[evaluate] {condition} threshold "
-          f"{'PASS' if not any(condition in f for f in failures) else 'FAIL'} "
-          f"(gate={GRADUATION_THRESHOLDS.get(condition)})")
+    condition = TASK_CONDITION.get(args.task, args.task)
+    run_rollouts(args.task, args.checkpoint, args.episodes,
+                 args.device, args.num_envs, args.max_vel_error, condition)
     return 0
 
 
