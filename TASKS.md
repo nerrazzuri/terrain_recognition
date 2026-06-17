@@ -2,7 +2,7 @@
 
 **Plan source of truth:** [x2_terrain_stair_climbing_roadmap.md](x2_terrain_stair_climbing_roadmap.md)
 **This file:** living checklist of every module and task. Update each task's status box as work progresses.
-**Last updated:** 2026-06-15 — Workspace builds on ROS2 Humble; perceive-and-stop pipeline validated end-to-end as a live ROS2 graph (flat→go, stairs→stop, dry-run). X2 stands in MuJoCo. Integrated X2_URDF-v1.3.0 + verified vs robot MC (lx2501_3). 186 tests pass (incl. integration). Sim/hardware/training items [~]/[!] with blockers.
+**Last updated:** 2026-06-17 — Stage A + Stage B RL policies trained on vast.ai L40S (Isaac Lab 2.1 / Isaac Sim 4.5); Stage B keeper `model_1050.pt` walks (vel-track 0.87, falls ~0.08). Module 4.4 eval + ONNX export implemented (`evaluate_policy.py`, `export_onnx.py`); flat_walk iters capped to 1500 after a late-training collapse. Reproducible GPU install in `tools/setup_local_isaac.sh`. Pure-logic unit tests pass. Sim/hardware items [~]/[!] with blockers.
 
 ---
 
@@ -37,12 +37,12 @@
 | P1 — Terrain Awareness | Low | No | 4 | 17 | 15 | Code done (2 blocked on hardware bags) |
 | P2 — Safe SDK Locomotion | Low/Med | No | 3 | 12 | 9 | Pipeline validated live (dry-run); on-robot blocked |
 | P3 — X2 Simulation Model | None | Not yet | 3 | 11 | 6 | Model validated in MuJoCo; Isaac Lab path pending |
-| P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 6 | Logic done; training blocked (Isaac Lab/GPU/torch) |
+| P4 — RL Locomotion Training | Sim only | Yes | 5 | 19 | 9 | Stage A+B trained (L40S); eval+ONNX export implemented; stairs curriculum next |
 | P5 — Sim-to-Real Deployment | **High** | Trained | 3 | 14 | 6 | Runtime logic done; hardware gated/blocked |
 | P6 — CReF Raw-Depth Policy | **High** | Yes | 4 | 11 | 1 | Architecture scaffolded; training blocked |
-| **Total** | | | **24** | **89** | **48** | |
+| **Total** | | | **24** | **89** | **51** | |
 
-**Current focus:** Phase 4 RL training on **Isaac Lab 2.3 via cloud GPU** (NVIDIA Brev, L40S 48 GB). **Stage A standing TRAINED** (1500 iters → stays upright full episode; learned a wide-splay stance, an under-specified-reward artifact). **Stage B flat-walk env built** (`Isaac-X2-FlatWalk-v0`): velocity tracking + hip-deviation (anti-splay) + feet-air-time + standing-env mixing → stands planted AND walks; training run next. P0-P2 software complete + sim-validated; P1/P2 hardware items blocked on the robot.
+**Current focus:** Phase 4 RL training on **Isaac Lab 2.1 / Isaac Sim 4.5 via cloud GPU** (vast.ai L40S 48 GB; reproducible install in `tools/setup_local_isaac.sh`). **Stage A standing + Stage B flat-walk TRAINED** — Stage B keeper is `models/x2_flat_walk_v1/model_1050.pt` (peak: reward 16.9, vel-track 0.87, falls ~0.08; later iters collapsed, so iters capped to 1500). **Module 4.4 eval+export implemented** (`evaluate_policy.py` rollout success-rates; `export_onnx.py` actor→ONNX + numeric check) — run both on the next GPU session to validate Stage B and produce `policy.onnx` for Phase 5. **Next:** run eval/export, then extend the curriculum (Stage C rough → D step → E stairs-up). P0–P2 software complete + sim-validated; P1/P2 hardware items blocked on the robot.
 
 ---
 
@@ -168,7 +168,7 @@
 
 ## Module 4.3 — Curriculum Tasks
 - `[~]` **P4-M3-T1** Stage A — standing (`x2_standing_env_cfg.py`): stand 30 s, recover small pushes. ***Trained & converged** (1500 iters, L40S, ~40k steps/s): X2 stays upright the full 20 s episode in ~93% of cases (`bad_orientation` 1.0→0.05), survives periodic pushes, mean reward +3. **Caveat:** drifts/yaws while upright (no planar-velocity penalty yet) — adding velocity-command tracking next for a planted stand + Stage-B walking.*
-- `[~]` **P4-M3-T2** Stage B — flat walking (`x2_flat_walk_env_cfg.py`): fwd 0–0.3 m/s, yaw ±0.3 rad/s. *Env built on Isaac Lab 2.3: velocity-command tracking + feet-air-time + hip-deviation (anti-splay) rewards; ~20% standing-env mixing so one policy stands planted AND walks. Registered Isaac-X2-FlatWalk-v0. Training run pending.*
+- `[x]` **P4-M3-T2** Stage B — flat walking (`x2_flat_walk_env_cfg.py`): fwd 0–0.3 m/s, yaw ±0.3 rad/s. ***Trained on vast.ai L40S** (Isaac Lab 2.1 / Isaac Sim 4.5, 168-dim obs): velocity tracking + hip-deviation (anti-splay) + ~20% standing-env mix → one policy stands planted AND walks. Peaked at iter ~1050 (mean reward 16.9, vel-track 0.87, falls ~0.08, episodes ~990/1000 = walks upright + tracks command). **Late-training collapse** (reward→2.2, falls→0.83 by iter 3000), so the keeper is `models/x2_flat_walk_v1/model_1050.pt` (peak checkpoints 1000–1500 + final preserved); `max_iterations` capped to 1500 for the next run. Local GUI view blocked by an Optimus-laptop PhysX hang — view on cloud or via eval metrics.*
 - `[~]` **P4-M3-T3** Stage C — rough terrain (`x2_rough_env_cfg.py`): 1–5 cm noise, mild slopes. *Scaffolded; blocked.*
 - `[~]` **P4-M3-T4** Stage D — single step / curb: 2→5→8→12→15 cm. *In `x2_stairs_env_cfg` + terrain_spec level 3; blocked.*
 - `[~]` **P4-M3-T5** Stage E — stairs up (`x2_stairs_env_cfg.py`): rise 5–18 cm, tread 24–35 cm, 1–8 steps. *Scaffolded (terrain_spec level 4); blocked.*
@@ -176,10 +176,10 @@
 - `[~]` **P4-M3-T7** Stage G — mixed terrain generalization. *terrain_spec level 6; blocked.*
 
 ## Module 4.4 — Evaluation & Export
-- `[~]` **P4-M4-T1** `scripts/play.py` + `evaluate_policy.py` — success-rate reports. *`check_graduation` pure + 3 unit tests; **rollouts blocked on Isaac Lab + checkpoint**.*
+- `[x]` **P4-M4-T1** `scripts/play.py` + `evaluate_policy.py` — success-rate reports. *`evaluate_policy.run_rollouts` implemented (headless rollout, per-episode survive + velocity-tracking → success rate vs graduation gate). Pure core (`episode_success`, `success_rate`, `check_graduation`) unit-tested (10 tests). Run on a GPU box: `python evaluate_policy.py --task flat_walk --checkpoint models/x2_flat_walk_v1/model_1050.pt`.*
 - `[x]` **P4-M4-T2** `scripts/inspect_observation.py` — observation sanity inspection. *Runnable without torch; verifies the 168-dim layout.*
-- `[~]` **P4-M4-T3** `scripts/export_onnx.py` — ONNX export. *Export wiring + `numeric_match`; **blocked to run on torch/onnxruntime**.*
-- `[~]` **P4-M4-T4** PyTorch-vs-ONNX numerical validation on test vectors. *`numeric_match` pure + 3 unit tests; **full validation blocked on torch**.*
+- `[x]` **P4-M4-T3** `scripts/export_onnx.py` — ONNX export. *Implemented: rebuilds the rsl_rl MLP actor-critic (matches `rsl_rl_ppo_cfg`), loads the checkpoint, exports the actor (obs→action, dynamic batch) to ONNX. Run on the GPU box venv (needs torch + onnxruntime + rsl_rl).*
+- `[~]` **P4-M4-T4** PyTorch-vs-ONNX numerical validation on test vectors. *`export_onnx.export` runs the ONNX-vs-PyTorch check (`numeric_match`, unit-tested) on N random vectors against `export.numeric_tolerance`; **execution pending a GPU-box run with a real checkpoint**.*
 
 ## Module 4.5 — Graduation Gate
 - `[~]` **P4-M5-T1** Confirm acceptance: flat >95%, rough >90%, 5 cm step >90%, 10 cm step >80%, stair-up >80% · no joint-limit abuse · no unrealistic torque reliance · smooth actions · survives randomized latency/noise. *`GRADUATION_THRESHOLDS` + `check_graduation` tested; **actual confirmation blocked on training**.*

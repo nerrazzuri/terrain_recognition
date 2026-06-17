@@ -44,6 +44,13 @@ class X2StandingPPORunnerCfg(RslRlOnPolicyRunnerCfg):
 
 @configclass
 class X2FlatWalkPPORunnerCfg(X2StandingPPORunnerCfg):
-    """Stage B flat walking — same PPO setup, more iterations (walking is harder)."""
+    """Stage B flat walking — same PPO setup.
+
+    The first 3000-iter run (vast.ai L40S) peaked at iter ~1050 (mean reward 16.9, falls ~0.08)
+    then *collapsed* by iter 3000 (reward ~2.2, falls ~0.83) — late-training instability. The
+    best checkpoint was model_1050.pt. We cap iterations near the stable region so the final
+    checkpoint is a good one; rsl_rl still saves every 50 iters (save_interval) for sweeping.
+    A deeper fix (LR decay / keep-best-by-eval) is tracked for the curriculum stages.
+    """
     experiment_name = "x2_flat_walk"
-    max_iterations = 3000
+    max_iterations = 1500
