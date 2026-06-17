@@ -26,23 +26,31 @@ training/mujoco/run_stand_walk_mujoco.py). The deploy node reproduces that on ha
 A) RECORD THE GROUND TRUTH (zero risk, robot stays under the factory MC) — do this FIRST.
 B) RUN OUR LOOP ON THE ROBOT (harness) — staged, only if A is done and gates pass.
 
+## Robot architecture (TWO boards — read carefully)
+The X2 has two onboard computers on an internal network; cross-board ROS 2 is the INTENDED design:
+- **Development Computing Unit = 10.0.1.41** — runs SDK / OUR code. Has ROS 2 Humble + aimdk_msgs +
+  all prereqs preinstalled and participates in the robot's ROS 2 network. **Run everything here.**
+- **Motion Control Unit (PC1) = 10.0.1.40** — runs the MC/HAL and stores the factory runtime+ONNX.
+  **Building/running secondary-development code here is PROHIBITED by Agibot (safety). Do NOT.**
+All control interfaces (joint command/state, IMU, locomotion, and the MC services SetMcInputSource /
+SetMcAction) are exposed over ROS 2 to the dev unit (.41). The SDK examples run on .41 and drive the
+robot on .40 — so our deploy node on .41 talking to the MC/HAL on .40 works by design.
+
 ## Environment / transfer (do this before anything)
-- This repo is already cloned here on the laptop. `git pull` to be current.
-- The factory ONNX models are ALREADY ON THE ROBOT (they ship in its runtime) — do NOT transfer them.
-  We run the deploy node on the robot's onboard computer and point it at the on-robot paths:
-      /agibot/software/mc_param/robot/lx2501_3_t2d5/rl_models/cpgwalkrun_v25_v2.onnx   (cpgwalk)
-      /agibot/software/mc_param/robot/lx2501_3_t2d5/rl_models/cpgtelecon_v3_fix.onnx   (cpgtelecon)
-  Confirm they exist on the robot (`ls` over SSH); if the path differs, find them with
-  `find /agibot -name 'cpgtelecon_v3_fix.onnx'` and use what you find.
-- The robot's onboard computer has ROS 2 + aimdk_msgs. We operate on the robot over SSH:
-      ROBOT_SSH = <ROBOT_SSH>          # e.g. ssh -p 22 user@192.168.x.x  — ask me if blank
-  Plan: run RECORDING and the DEPLOY NODE on the robot (best 50/100 Hz timing). Only OUR CODE needs
-  to get onto the robot: `git clone`/`git pull` this repo there (or scp it). Ensure `onnxruntime` +
-  `numpy` are in the robot's python; if not, ask me before installing.
+- This repo: `git clone`/`git pull` it onto the **dev unit (.41)** (only our code needs to move; the
+  dev unit already has ROS 2 + aimdk_msgs). Ensure `onnxruntime` + `numpy` are in its python; if not,
+  ask me before installing.
+- ONNX models live on the **main board (.40)** at
+  `/agibot/software/mc_param/robot/lx2501_3_t2d5/rl_models/{cpgwalkrun_v25_v2,cpgtelecon_v3_fix}.onnx`.
+  Our node runs on .41, so the files must be local to .41. FIRST check whether .41 already has them
+  (`find /agibot -name cpgtelecon_v3_fix.onnx` on .41); if not, copy internally (cross-board ssh
+  works): `scp 10.0.1.40:/agibot/software/mc_param/robot/lx2501_3_t2d5/rl_models/{cpgwalkrun_v25_v2,cpgtelecon_v3_fix}.onnx ~/onnx/`.
+- SSH: I connect to the dev unit; you operate there.
+      ROBOT_SSH = <ROBOT_SSH>          # e.g. ssh root@10.0.1.41 — ask me if blank
 
 ## Goal A — record the CPG / observation ground truth
-Follow docs/hardware_bringup_cpgwalk.md "Part A". In short, over SSH on the robot:
-  source /agibot/software/housekeeper/bin/setup.bash
+Follow docs/hardware_bringup_cpgwalk.md "Part A". Run on the **dev unit (.41)** (ROS 2 env already
+set up; it sees the robot topics over the network):
   ros2 topic info /aima/mc/rl/debug --verbose     # capture the message TYPE; tell me
   cd ~ && ros2 bag record -o cpg_debug_$(date +%H%M%S) \
     /aima/mc/rl/debug /aima/mc_debug_f64 \
@@ -55,11 +63,15 @@ a guaranteed win even if we never get to Goal B.
 
 ## Goal B — run our loop on the robot (HARNESS REQUIRED, staged)
 Follow docs/hardware_bringup_cpgwalk.md "Part C" precisely. Critical points:
-- C1 ARBITRATION (UNRESOLVED — most important): the factory MC normally publishes
-  /aima/hal/joint/leg/command. We must release that authority first. Verify with
-  `ros2 topic info /aima/hal/joint/leg/command --verbose` that ONLY our node publishes before any
-  policy runs. First prove control with the SINGLE-JOINT SDK example (motocontrol.py) on the harness.
-  If the MC keeps publishing, STOP and tell me — do not fight it.
+- C1 ARBITRATION (the sanctioned mechanism — most important): the MC uses PRIORITY-BASED input-source
+  arbitration (SDK doc 5.1.3). The proper takeover is NOT "kill the MC" — it is: register our own
+  input source via the `SetMcInputSource` service (action ADD, a unique name, priority above the
+  active source; RC=80/VR=70/app=60/voice=50/pnc=40), then publish. Study the SDK examples "6.1.6
+  Register custom input source" + "6.1.9 Joint motor control" (and keyboard-control 6.1.10) for the
+  canonical sequence, and likely a `SetMcAction` to a mode that yields the legs. VERIFY with
+  `ros2 topic info /aima/hal/joint/leg/command --verbose` that only our node effectively drives the
+  legs, and FIRST prove it with the single-joint example on the harness. If the MC still wins, STOP
+  and tell me. (Note: our source has a timeout — if our node dies, the MC re-arbitrates, a safety net.)
 - The deploy node enforces a STRICT stand-before-walk gate (cpgtelecon stands still, then cpgwalk
   walks). It will NOT walk until a firm stand is verified. Launch (on the robot, using the on-robot
   ONNX paths):
