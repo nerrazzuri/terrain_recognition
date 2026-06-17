@@ -34,6 +34,14 @@ MODEL = REPO / "training" / "mujoco" / "model" / "scene.xml"
 DEFAULT_ONNX = ("/home/liang/Projects/X2 Locomotion/0.9.7/agibot/software/"
                 "mc_param/robot/lx2501_3_t2d5/rl_models/cpgwalkrun_v25_v2.onnx")
 
+# Strict stand-gate thresholds. Fall + height ratio come from the 0.9.7 runtime
+# action_state.yaml `estimator`; the firm-stand tolerances are tighter (must be settled, not just
+# "not fallen") so we only start walking from a genuinely stable stand — mirroring STABLE->MOVE.
+BODY_HEIGHT = 0.652            # cpgwalk_config body_height
+STAND_HEIGHT_RATIO = 0.8       # estimator.stand_height_ratio
+FALL_PITCH, FALL_ROLL = 0.7, 0.5   # estimator.fall_pitch / fall_roll
+STAND_PITCH, STAND_ROLL, STAND_OMEGA = 0.20, 0.15, 0.5
+
 
 def quat_to_euler(w, x, y, z):
     """(w,x,y,z) -> roll,pitch,yaw (rad)."""
@@ -53,7 +61,9 @@ def main(argv=None) -> int:
     ap.add_argument("--cmd4", type=float, default=0.0, help="4th command dim (gait/mode flag — confirm via rl/debug)")
     ap.add_argument("--seconds", type=float, default=8.0)
     ap.add_argument("--settle", type=float, default=0.5,
-                    help="balance-in-place warmup (policy ON, zero command) before ramping command")
+                    help="min balance-in-place warmup before the stand gate may unlock walking")
+    ap.add_argument("--stand_hold", type=float, default=0.5,
+                    help="seconds the firm-stand criteria must hold before walking unlocks")
     ap.add_argument("--ramp", type=float, default=1.0, help="seconds to ramp command 0->target")
     ap.add_argument("--view", action="store_true")
     ap.add_argument("--video", default=None, help="write an MP4 of the run to this path (headless, EGL)")
@@ -126,21 +136,35 @@ def main(argv=None) -> int:
     def run_loop(viewer=None):
         n_ctrl = int(args.seconds / fc.CONTROL_DT)
         min_h, fell = 1e9, None
-        x0 = walk_t0 = walk_x0 = None
+        walk_t0 = walk_x0 = ramp_t0 = stand_since = None
+        walk_unlocked = False
         for k in range(n_ctrl):
             t = k * fc.CONTROL_DT
-            # policy runs (balances) from t=0; command stays 0 during warmup then ramps in —
-            # so the robot is NEVER in an unbalanced stiff hold (no fake near-fall).
-            cmd_scale = 0.0 if t < args.settle else min(1.0, (t - args.settle) / max(args.ramp, 1e-6))
+            # --- STRICT STAND GATE (mirrors factory STABLE->MOVE; thresholds from action_state.yaml) ---
+            # The policy balances at zero command until a firm, settled, upright stand is HELD; only
+            # then does the forward command ramp in. The robot can never start walking from a fall.
+            roll, pitch = quat_to_euler(*data.qpos[base_qadr + 3:base_qadr + 7])[:2]
+            h = float(data.qpos[base_qadr + 2])
+            wbase = float(np.linalg.norm(data.qvel[base_dadr + 3:base_dadr + 6]))
+            if not walk_unlocked:
+                firm = (t >= args.settle and abs(pitch) < STAND_PITCH and abs(roll) < STAND_ROLL
+                        and h >= STAND_HEIGHT_RATIO * BODY_HEIGHT and wbase < STAND_OMEGA)
+                stand_since = (stand_since or t) if firm else None
+                if stand_since is not None and (t - stand_since) >= args.stand_hold:
+                    walk_unlocked, ramp_t0 = True, t
+                    print(f"[stand] firm stand verified at t={t:.2f}s -> walk unlocked")
+                cmd_scale = 0.0
+            else:
+                cmd_scale = min(1.0, (t - ramp_t0) / max(args.ramp, 1e-6))
+                if walk_t0 is None and cmd_scale >= 1.0:     # measure steady-state speed (post-ramp)
+                    walk_t0, walk_x0 = t, float(data.qpos[base_qadr])
             step_policy(t, cmd_scale)
-            if cmd_scale > 0 and walk_t0 is None:                    # mark start of commanded walk
-                walk_t0, walk_x0 = t, float(data.qpos[base_qadr])
             for _ in range(substeps):
                 apply_pd()
                 mujoco.mj_step(model, data)
             h = float(data.qpos[base_qadr + 2])
             min_h = min(min_h, h)
-            if h < 0.35 and fell is None:
+            if fell is None and (h < 0.35 or abs(pitch) > FALL_PITCH or abs(roll) > FALL_ROLL):
                 fell = t
             if viewer is not None:
                 viewer.sync()
@@ -148,27 +172,36 @@ def main(argv=None) -> int:
                 cam.lookat = data.qpos[base_qadr:base_qadr + 3]      # track the robot
                 renderer.update_scene(data, camera=cam)
                 frames.append(renderer.render().copy())
-        dx = float(data.qpos[base_qadr]) - (walk_x0 if walk_x0 is not None else 0.0)
-        dt_walk = (n_ctrl * fc.CONTROL_DT) - (walk_t0 or 0.0)
-        return min_h, fell, dx, (dx / dt_walk if dt_walk > 0 else 0.0)
+        if walk_x0 is None:                                  # walk never unlocked
+            return min_h, fell, 0.0, 0.0, walk_unlocked
+        dx = float(data.qpos[base_qadr]) - walk_x0
+        dt_walk = (n_ctrl * fc.CONTROL_DT) - walk_t0
+        return min_h, fell, dx, (dx / dt_walk if dt_walk > 0 else 0.0), walk_unlocked
 
     print(f"[cpgwalk-mujoco] dt={fc.CONTROL_DT}s substeps={substeps} cmd=({args.vx},{args.vy},{args.yaw}|{args.cmd4})")
     if args.view:
         import mujoco.viewer
         with mujoco.viewer.launch_passive(model, data) as v:
-            min_h, fell, dx, vx_mean = run_loop(v)
+            min_h, fell, dx, vx_mean, walk_unlocked = run_loop(v)
     else:
-        min_h, fell, dx, vx_mean = run_loop()
+        min_h, fell, dx, vx_mean, walk_unlocked = run_loop()
 
     final_h = float(data.qpos[base_qadr + 2])
     upright = fell is None and final_h > 0.45
-    walked = upright and vx_mean >= 0.5 * abs(args.vx) and abs(args.vx) > 0
-    verdict = "WALKED" if walked else ("STAYED UP (not walking)" if upright else "FELL")
-    print(f"[RESULT] {verdict} | final_height={final_h:.3f} min_height={min_h:.3f} | "
-          f"forward dx={dx:+.2f} m  mean_vx={vx_mean:+.2f} m/s (cmd {args.vx:+.2f})"
+    walked = upright and walk_unlocked and vx_mean >= 0.5 * abs(args.vx) and abs(args.vx) > 0
+    if not walk_unlocked and args.vx != 0:
+        verdict = "STAND GATE NOT PASSED (walk never unlocked)"
+    elif walked:
+        verdict = "WALKED (stand-gated)"
+    elif upright:
+        verdict = "STAYED UP (not walking)"
+    else:
+        verdict = "FELL"
+    print(f"[RESULT] {verdict} | stand_unlocked={walk_unlocked} | final_height={final_h:.3f} "
+          f"min_height={min_h:.3f} | forward dx={dx:+.2f} m  mean_vx={vx_mean:+.2f} m/s (cmd {args.vx:+.2f})"
           + (f" | fell at t={fell:.1f}s" if fell else ""))
-    print("  height ~0.65=standing, <0.35=fallen. WALKED => our loop reproduces the factory gait; "
-          "if STAYED UP but vx~0, the command/4th-dim or CPG clock needs the rl/debug ground truth.")
+    print("  Walk unlocks ONLY after a firm stand is verified+held (factory STABLE->MOVE). "
+          "height ~0.65=standing, <0.35=fallen.")
 
     if frames:
         import imageio.v2 as imageio

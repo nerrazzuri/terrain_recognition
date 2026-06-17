@@ -78,6 +78,15 @@ class CpgwalkDeploy(Node):
         self.declare_parameter("rate_hz", 50.0)
         self.declare_parameter("imu_roll_offset", 0.0)
         self.declare_parameter("imu_pitch_offset", -0.015)
+        # --- strict STAND-before-WALK gate (mirrors factory STABLE->MOVE; thresholds from
+        #     action_state.yaml `estimator`). No walk command is applied until a firm stand is
+        #     verified and held, so the robot can never start walking from a lying/unstable state.
+        self.declare_parameter("stand_pitch_max", 0.20)   # rad, firm-stand upright tolerance
+        self.declare_parameter("stand_roll_max", 0.15)    # rad
+        self.declare_parameter("stand_omega_max", 0.50)   # rad/s, must be settled
+        self.declare_parameter("stand_hold_s", 1.0)       # must hold the above this long
+        self.declare_parameter("fall_pitch", 0.70)        # action_state.yaml estimator.fall_pitch
+        self.declare_parameter("fall_roll", 0.50)         # action_state.yaml estimator.fall_roll
         onnx = self.get_parameter("onnx").value
         if not onnx or not pathlib.Path(onnx).exists():
             raise RuntimeError("set --ros-args -p onnx:=/path/to/cpgwalkrun_v25_v2.onnx")
@@ -88,6 +97,14 @@ class CpgwalkDeploy(Node):
         self.cmd = np.zeros(4, dtype=np.float32)
         self.kp_scale = 0.0
         self.t_run = 0.0
+        self.walk_ok = False          # set True only after a firm stand is verified
+        self.stand_since = None       # time the firm-stand criteria first held continuously
+        self.stand_pitch = float(self.get_parameter("stand_pitch_max").value)
+        self.stand_roll = float(self.get_parameter("stand_roll_max").value)
+        self.stand_omega = float(self.get_parameter("stand_omega_max").value)
+        self.stand_hold_s = float(self.get_parameter("stand_hold_s").value)
+        self.fall_pitch = float(self.get_parameter("fall_pitch").value)
+        self.fall_roll = float(self.get_parameter("fall_roll").value)
         self.dt = 1.0 / float(self.get_parameter("rate_hz").value)
         self.ramp_s = float(self.get_parameter("ramp_s").value)
         self.timeout = float(self.get_parameter("state_timeout_s").value)
@@ -138,8 +155,10 @@ class CpgwalkDeploy(Node):
             return
         if msg.data and not self.enabled:
             self.t_run, self.kp_scale = 0.0, 0.0  # restart ramp + clock
+            self.walk_ok, self.stand_since = False, None  # re-verify a firm stand every time
             self.policy.reset()
-            self.get_logger().info("RUN: ramping stiffness in.")
+            self.get_logger().info("STAND phase: balancing at zero command; walk stays locked "
+                                   "until a firm stand is verified.")
         self.enabled = bool(msg.data)
 
     def _on_estop(self, msg: Bool):
@@ -155,18 +174,41 @@ class CpgwalkDeploy(Node):
 
     # --- control loop ---
     def _tick(self):
-        fresh = (self._now() - self.t_state) < self.timeout and (self._now() - self.t_imu) < self.timeout
-        if not fresh and self.enabled:
-            self.enabled = False
+        now = self._now()
+        fresh = (now - self.t_state) < self.timeout and (now - self.t_imu) < self.timeout
+        roll, pitch = float(self.euler[0]), float(self.euler[1])
+
+        # hard fall guard (factory estimator thresholds) — always active while enabled
+        if self.enabled and (abs(pitch) > self.fall_pitch or abs(roll) > self.fall_roll):
+            self.enabled, self.walk_ok = False, False
+            self.get_logger().error(f"FALL guard tripped (pitch={pitch:+.2f} roll={roll:+.2f}) -> HOLD")
+        if self.enabled and not fresh:
+            self.enabled, self.walk_ok = False, False
             self.get_logger().warn("Watchdog: stale state/imu -> HOLD.")
 
         run = self.enabled and not self.estopped and fresh
         if run:
             self.t_run += self.dt
             self.kp_scale = min(1.0, self.t_run / max(self.ramp_s, 1e-6))
+
+            # STRICT STAND GATE: verify a firm, settled, upright stand is HELD before unlocking walk.
+            if not self.walk_ok:
+                firm = (abs(pitch) < self.stand_pitch and abs(roll) < self.stand_roll
+                        and float(np.linalg.norm(self.omega)) < self.stand_omega
+                        and self.kp_scale >= 1.0)          # stiffness fully ramped in
+                if firm:
+                    self.stand_since = self.stand_since or now
+                    if (now - self.stand_since) >= self.stand_hold_s:
+                        self.walk_ok = True
+                        self.get_logger().info("STAND verified firm -> WALK unlocked.")
+                else:
+                    self.stand_since = None                # reset the hold timer on any wobble
+
+            # command is zero until the stand is verified (can never walk from lying/unstable)
+            cmd = self.cmd if self.walk_ok else np.zeros(4, dtype=np.float32)
             dof_pos = np.array([self.pos.get(n, NEUTRAL[n]) for n in fc.JOINT_ORDER], dtype=np.float32)
             dof_vel = np.array([self.vel.get(n, 0.0) for n in fc.JOINT_ORDER], dtype=np.float32)
-            obs = fc.build_obs(self.omega, self.euler, self.cmd, dof_pos, dof_vel,
+            obs = fc.build_obs(self.omega, self.euler, cmd, dof_pos, dof_vel,
                                self.policy._prev_action, fc.cpg_phase(self.t_run))
             action = self.policy.infer(obs)
             targets = dict(zip(fc.JOINT_ORDER, fc.action_to_targets(action)))
