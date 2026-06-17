@@ -63,15 +63,15 @@ a guaranteed win even if we never get to Goal B.
 
 ## Goal B — run our loop on the robot (HARNESS REQUIRED, staged)
 Follow docs/hardware_bringup_cpgwalk.md "Part C" precisely. Critical points:
-- C1 ARBITRATION (the sanctioned mechanism — most important): the MC uses PRIORITY-BASED input-source
-  arbitration (SDK doc 5.1.3). The proper takeover is NOT "kill the MC" — it is: register our own
-  input source via the `SetMcInputSource` service (action ADD, a unique name, priority above the
-  active source; RC=80/VR=70/app=60/voice=50/pnc=40), then publish. Study the SDK examples "6.1.6
-  Register custom input source" + "6.1.9 Joint motor control" (and keyboard-control 6.1.10) for the
-  canonical sequence, and likely a `SetMcAction` to a mode that yields the legs. VERIFY with
-  `ros2 topic info /aima/hal/joint/leg/command --verbose` that only our node effectively drives the
-  legs, and FIRST prove it with the single-joint example on the harness. If the MC still wins, STOP
-  and tell me. (Note: our source has a timeout — if our node dies, the MC re-arbitrates, a safety net.)
+- C1 TAKEOVER — STOP THE MC (most important): we do LOW-LEVEL joint control, so per Agibot's own
+  joint example (SDK 6.1.9) we must stop the native MC to obtain authority. On PC1 (10.0.1.40):
+      aima em stop-app mc        # admin command; allowed on .40. Recover later with: aima em start-app mc
+  The instant the MC stops there is NO factory balance/estimator/fall-detect — our node is the ENTIRE
+  controller. So: (i) record Goal A FIRST (rl/debug dies with the MC); (ii) robot on a taut gantry;
+  (iii) have our deploy node ready so it takes over (HOLD/stand) immediately after the stop. Verify
+  with `ros2 topic info /aima/hal/joint/leg/command --verbose` that only our node publishes. FIRST
+  prove control with the single-joint SDK example (motocontrol.py) before our full policy.
+  (Do NOT use SetMcInputSource here — that is the HIGH-LEVEL velocity path, not low-level joint control.)
 - The deploy node enforces a STRICT stand-before-walk gate (cpgtelecon stands still, then cpgwalk
   walks). It will NOT walk until a firm stand is verified. Launch (on the robot, using the on-robot
   ONNX paths):

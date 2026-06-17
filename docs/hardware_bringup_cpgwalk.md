@@ -63,35 +63,42 @@ frequency/shape, and that the 4th command dim `[9]` behaves as expected. Update
 
 ## Part C — Run cpgwalk in OUR loop on the robot (HARNESS REQUIRED)
 
-### C0. Put the run machine in place
-Run the node **on the robot's onboard computer** (best 50 Hz timing) or a **wired laptop on the same
-`ROS_DOMAIN_ID`**. It needs: this repo, `onnxruntime`, `aimdk_msgs`, and the 0.9.7 ONNX:
+### C0. Put the run machine in place — the DEVELOPMENT computing unit (10.0.1.41)
+Run our node on the **dev unit (.41)** — NOT the MC unit (.40, prohibited). The dev unit already has
+ROS 2 Humble + aimdk_msgs and is on the robot's ROS 2 network. Get our code + the ONNX onto .41:
 ```bash
-export ONNX="/home/liang/Projects/X2 Locomotion/0.9.7/agibot/software/mc_param/robot/lx2501_3_t2d5/rl_models/cpgwalkrun_v25_v2.onnx"
-source /agibot/software/housekeeper/bin/setup.bash      # aimdk_msgs
+# on .41: clone/pull this repo; ensure onnxruntime+numpy in its python.
+# ONNX live on the MC unit (.40); copy them to .41 if absent (internal ssh works):
+mkdir -p ~/onnx && scp 10.0.1.40:/agibot/software/mc_param/robot/lx2501_3_t2d5/rl_models/{cpgwalkrun_v25_v2,cpgtelecon_v3_fix}.onnx ~/onnx/
+export WALK_ONNX=~/onnx/cpgwalkrun_v25_v2.onnx
+export STAND_ONNX=~/onnx/cpgtelecon_v3_fix.onnx
 ```
 
-### C1. Confirm + claim the leg-command authority  (the R14 arbitration step — do this carefully)
-The MC normally publishes `/aima/hal/joint/leg/command`. Two publishers fighting = a fall.
+### C1. STOP THE MC to obtain control authority (low-level joint control)
+We do low-level joint control, so per Agibot's joint example (SDK 6.1.9) the native MC must be stopped.
+**On PC1 (10.0.1.40)** — this admin command is allowed there:
 ```bash
-ros2 topic info /aima/hal/joint/leg/command --verbose    # how many publishers NOW? (expect MC)
+aima em stop-app mc       # MC out of the loop. Recover anytime with: aima em start-app mc
+ros2 topic info /aima/hal/joint/leg/command --verbose   # confirm the MC is no longer publishing
 ```
-**Before trusting cpgwalk, prove arbitration with ONE joint** using the SDK example on the harness:
-suspend MC leg control (operator: set MC to a damping/passive state, or stop the MC module via the
-process manager), re-check the publisher count is 0, then run the SDK `motocontrol.py` (oscillates one
-knee). If the knee tracks our command and `dcu_leg_safe` doesn't trip → arbitration is ours. **If the
-MC keeps publishing, STOP** — resolve how to release it (ask AgiBot) before going further.
+⚠️ The instant the MC stops there is **NO factory balance/estimator/fall-detect** — our node becomes
+the entire controller. So Goal A (rl/debug) must already be recorded (it dies with the MC), the robot
+must be on a **taut gantry**, and our node must be ready to take over immediately (next step).
+**First prove control with ONE joint** (SDK `motocontrol.py`, oscillate a knee) and confirm
+`dcu_leg_safe` doesn't trip before running the full policy. If anything is off, STOP.
 
-✅ **Gate C1:** only OUR process publishes `/aima/hal/joint/leg/command`; one joint obeys us on the harness.
+✅ **Gate C1:** MC stopped; only OUR process publishes `/aima/hal/joint/leg/command`; one joint obeys us.
 
-### C2. HOLD the neutral pose under our PD (no policy yet)
+### C2. STAND on cpgtelecon under our loop (no walk yet)
 ```bash
 ros2 run x2_policy_runtime cpgwalk_deploy --ros-args \
-  -p onnx:="$ONNX" -p imu_topic:=/aima/hal/imu/torso/state -p ramp_s:=3.0
+  -p onnx:="$WALK_ONNX" -p stand_onnx:="$STAND_ONNX" \
+  -p imu_topic:=/aima/hal/imu/torso/state -p ramp_s:=3.0
+ros2 topic pub -1 /cpgwalk/enable std_msgs/Bool '{data: true}'   # enter STAND phase
 ```
-The node starts in **HOLD**: it PD-holds the factory neutral stand pose, stiffness ramping in over 3 s,
-with a watchdog (stale state → HOLD) and per-joint limit clamps. On the harness, confirm the robot
-settles into a stable standing pose under our commands. Keep the harness taking some weight.
+The node holds the robot in a **still stand on cpgtelecon** (stiffness ramping in over 3 s), with a
+watchdog, per-joint limit clamps, and fall guard. On the harness, confirm a stable, NON-stepping
+stand under our commands. Keep the harness taking some weight.
 
 ✅ **Gate C2:** robot holds the neutral pose smoothly under our loop; no oscillation, no limit clamps firing.
 
