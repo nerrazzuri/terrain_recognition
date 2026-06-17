@@ -95,15 +95,23 @@ settles into a stable standing pose under our commands. Keep the harness taking 
 
 ✅ **Gate C2:** robot holds the neutral pose smoothly under our loop; no oscillation, no limit clamps firing.
 
-### C3. Balance in place (policy, zero velocity)
+### C3. Firm stand FIRST — walk is hard-locked until verified (factory STABLE → MOVE)
+The factory enters `STABLE`/`STAND_DEFAULT` (held by `cpgtelecon`) and only then transitions to
+`MOVE`/`LOCOMOTION_DEFAULT` (`cpgwalk`). **Our node enforces the same as a strict gate** — on enable
+it runs the policy at **zero command** and will **not apply any walk command until a firm stand is
+verified and held** (`stand_hold_s`, default 1 s):
 ```bash
 ros2 topic pub -1 /cpgwalk/cmd_vel geometry_msgs/Twist '{}'          # vx=0
-ros2 topic pub -1 /cpgwalk/enable  std_msgs/Bool '{data: true}'      # RUN
+ros2 topic pub -1 /cpgwalk/enable  std_msgs/Bool '{data: true}'      # STAND phase
+# watch the log for:  "STAND verified firm -> WALK unlocked."
 ```
-Policy now runs with a zero command (it should make tiny balancing motions, no stepping — like the
-MuJoCo `vx=0` case). Watch IMU/posture.
+Firm-stand criteria (node params; defaults): `|pitch|<0.20`, `|roll|<0.15` rad, base `|omega|<0.5`
+rad/s, stiffness fully ramped. A **hard fall guard** (`fall_pitch 0.7`, `fall_roll 0.5` from the
+runtime `estimator`) forces HOLD if exceeded. The robot can never start walking from a lying/unstable
+state — even if a `cmd_vel` is already being published, it stays at zero until the stand is verified.
 
-✅ **Gate C3:** stays upright and balanced under the policy for ≥30 s.
+✅ **Gate C3:** log shows `WALK unlocked`, and the robot stays upright/balanced for ≥30 s. If it never
+unlocks, it is NOT standing firmly enough — do not force it; investigate posture/IMU first.
 
 ### C4. First steps (small forward command)
 0.9 needs forward command ≥ `min_velx_command` = **0.3** to walk:

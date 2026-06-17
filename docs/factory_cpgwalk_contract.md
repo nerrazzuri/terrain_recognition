@@ -52,6 +52,16 @@ found an effective but **asymmetric/limping** gait. To get a natural gait we sho
 a CPG/clock phase like the factory does, or — preferably — **distill the factory `cpgwalk`**
 (which already encodes a good gait) and only learn the terrain/stair delta on top.
 
+## State sequencing — STAND before WALK (strict, mirrors the factory)
+From `action_state.yaml`: the MC goes `PASSIVE` (init) → **`STABLE`/`STAND_DEFAULT`** → **`MOVE`/
+`LOCOMOTION_DEFAULT`**. `STAND_DEFAULT` is held by a **separate policy `cpgtelecon`** (85-obs/14-act,
+`cpg_t 0.85`); `cpgwalk` runs only in `LOCOMOTION_DEFAULT`. So firm standing is a hard prerequisite to
+walking. Our loop enforces the same gate (`run_cpgwalk_mujoco.py` + `cpgwalk_deploy.py`): balance at
+zero command, unlock walking only after a firm stand is verified+held. We currently hold the stand
+with `cpgwalk`@cmd0 (it balances); swapping in a `cpgtelecon` adapter would match the factory exactly.
+**Stand/fall thresholds (runtime `estimator`):** `fall_pitch 0.7`, `fall_roll 0.5`, `lie_pitch 1.0`,
+`stand_height_ratio 0.8`, `squat_height_ratio 0.6`.
+
 ## Recovering the exact CPG phase `q` (ground truth) — two confirmed ways
 The CPG phase was the one piece generated *inside* the sealed MC. The runtime resolves it:
 1. **It's an open-loop clock with known params, not feedback-driven.** `cpg_t: 0.6` s (active gait 2;
