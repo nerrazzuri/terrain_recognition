@@ -42,7 +42,7 @@ Total = 3+3+4+17+17+17+4 = **65**. Stacked ×10 → 650.
 
 ## CPG gait params (`CPGWalkConfig.cpgwalk`)
 `body_height 0.652`, `swing_height 0.07`, `ankle_height 0.071`, `cpg_t 0.6`, gait modes
-(`run_mode`, `step_mode`), `min_velx_command 0.3`, yaw thresholds, etc. The policy is
+(`run_mode`, `step_mode`), `min_velx_command 0.1`, yaw thresholds, etc. The policy is
 **CPG-guided**: a central pattern generator supplies the rhythmic phase (`q`, obs [61:65]) and
 the network outputs corrective offsets — this is why the factory gait is clean/rhythmic.
 
@@ -51,6 +51,23 @@ Our from-scratch v3 walker had **no CPG / gait clock** (our `gait_phase` obs was
 found an effective but **asymmetric/limping** gait. To get a natural gait we should either feed
 a CPG/clock phase like the factory does, or — preferably — **distill the factory `cpgwalk`**
 (which already encodes a good gait) and only learn the terrain/stair delta on top.
+
+## Recovering the exact CPG phase `q` (ground truth) — two confirmed ways
+The CPG phase was the one piece generated *inside* the sealed MC. The runtime resolves it:
+1. **It's an open-loop clock with known params, not feedback-driven.** `cpg_t: 0.6` s (active gait 2;
+   `gait_1_t 0.87`, `gait_2_t 0.6`, `change_cpg_t 1`). So `q` is a deterministic time oscillator we
+   reconstruct exactly. Crucially, when we run our OWN loop we *generate* the clock — no need to sync to
+   the robot's instantaneous phase; the policy follows whatever consistent 0.6 s clock we feed it.
+2. **The robot publishes the policy debug stream:** `/aima/mc/rl/debug` @ **50 Hz** (`use_debug: true`,
+   `PublisherManager` → `rl_debug`). Recording it during an MC-driven walk very likely captures the real
+   65-obs incl. `q[61:65]`. **Action: record `/aima/mc/rl/debug` (+ `/aima/mc_debug_f64`) next robot
+   session**, decode, read true CPG/obs, validate our reconstruction (supersedes joint-command matching).
+
+## Obs/action filtering — required for faithful LIVE replay (`CPGWalkConfig.filter`)
+The MC low-pass filters obs + actions before/after the policy. To run cpgwalk *live* in our loop we must
+replicate: `imu_vel_cutoff 95`, `imu_rpy_cutoff 95`, per-joint `q_vel_cutoff` + `action_cutoff` arrays,
+`filter_x 0.6`, `T 0.5`, command `max_acceleration/deceleration 2.0`. (Less critical for sim-time
+distillation, but mandatory for hardware Way-A replay.)
 
 ## Implications for the stair policy (Module 4.6)
 - Match this **17-DoF action** + **PD scaling** so our output maps 1:1 to `/aima/hal/joint/*/command`.
