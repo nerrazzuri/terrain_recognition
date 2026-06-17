@@ -27,17 +27,18 @@ A) RECORD THE GROUND TRUTH (zero risk, robot stays under the factory MC) — do 
 B) RUN OUR LOOP ON THE ROBOT (harness) — staged, only if A is done and gates pass.
 
 ## Environment / transfer (do this before anything)
-- This repo is already cloned here. `git pull` to be current.
-- The factory ONNX models are NOT in git (large binaries). I will transfer them; confirm these two
-  files exist and tell me their path:
-      cpgwalkrun_v25_v2.onnx   (cpgwalk / LOCOMOTION)
-      cpgtelecon_v3_fix.onnx   (cpgtelecon / STAND_DEFAULT)
-  If missing, STOP and ask me to copy the 0.9.7 runtime `rl_models/` folder over.
-- The robot's onboard computer has ROS 2 + aimdk_msgs. We will operate on the robot over SSH:
+- This repo is already cloned here on the laptop. `git pull` to be current.
+- The factory ONNX models are ALREADY ON THE ROBOT (they ship in its runtime) — do NOT transfer them.
+  We run the deploy node on the robot's onboard computer and point it at the on-robot paths:
+      /agibot/software/mc_param/robot/lx2501_3_t2d5/rl_models/cpgwalkrun_v25_v2.onnx   (cpgwalk)
+      /agibot/software/mc_param/robot/lx2501_3_t2d5/rl_models/cpgtelecon_v3_fix.onnx   (cpgtelecon)
+  Confirm they exist on the robot (`ls` over SSH); if the path differs, find them with
+  `find /agibot -name 'cpgtelecon_v3_fix.onnx'` and use what you find.
+- The robot's onboard computer has ROS 2 + aimdk_msgs. We operate on the robot over SSH:
       ROBOT_SSH = <ROBOT_SSH>          # e.g. ssh -p 22 user@192.168.x.x  — ask me if blank
-  Plan: run RECORDING and the DEPLOY NODE on the robot's onboard computer (best 50/100 Hz timing).
-  Copy this repo + the two ONNX files to the robot with scp. Ensure `onnxruntime` + `numpy` are
-  installed in the robot's python; if not, ask me before installing.
+  Plan: run RECORDING and the DEPLOY NODE on the robot (best 50/100 Hz timing). Only OUR CODE needs
+  to get onto the robot: `git clone`/`git pull` this repo there (or scp it). Ensure `onnxruntime` +
+  `numpy` are in the robot's python; if not, ask me before installing.
 
 ## Goal A — record the CPG / observation ground truth
 Follow docs/hardware_bringup_cpgwalk.md "Part A". In short, over SSH on the robot:
@@ -60,9 +61,11 @@ Follow docs/hardware_bringup_cpgwalk.md "Part C" precisely. Critical points:
   policy runs. First prove control with the SINGLE-JOINT SDK example (motocontrol.py) on the harness.
   If the MC keeps publishing, STOP and tell me — do not fight it.
 - The deploy node enforces a STRICT stand-before-walk gate (cpgtelecon stands still, then cpgwalk
-  walks). It will NOT walk until a firm stand is verified. Launch (on the robot):
+  walks). It will NOT walk until a firm stand is verified. Launch (on the robot, using the on-robot
+  ONNX paths):
       ros2 run x2_policy_runtime cpgwalk_deploy --ros-args \
-        -p onnx:=<cpgwalkrun_v25_v2.onnx> -p stand_onnx:=<cpgtelecon_v3_fix.onnx> \
+        -p onnx:=/agibot/software/mc_param/robot/lx2501_3_t2d5/rl_models/cpgwalkrun_v25_v2.onnx \
+        -p stand_onnx:=/agibot/software/mc_param/robot/lx2501_3_t2d5/rl_models/cpgtelecon_v3_fix.onnx \
         -p imu_topic:=/aima/hal/imu/torso/state
   Then: enable (std_msgs/Bool true) -> watch log for "STAND verified firm -> WALK unlocked" ->
   only then publish /cpgwalk/cmd_vel (start vx 0.3). Abort with /cpgwalk/estop true or Ctrl-C.
@@ -80,7 +83,8 @@ Follow docs/hardware_bringup_cpgwalk.md "Part C" precisely. Critical points:
 ---
 
 ### Notes for me (Liang), not for the laptop instance
-- Transfer the two ONNX files (and ideally the whole `0.9.7/.../rl_models/` folder) to the laptop or
-  straight to the robot before starting.
+- No ONNX transfer needed — the models already live on the robot at
+  `/agibot/software/mc_param/robot/lx2501_3_t2d5/rl_models/`. Only the repo code needs to reach the
+  robot (git clone/pull or scp), plus `onnxruntime` in the robot's python.
 - Have the robot's SSH string ready, the gantry rigged and load-tested, and the e-stop tested.
 - Goal A needs no harness and is the safe guaranteed win — prioritize it if time/safety is tight.
